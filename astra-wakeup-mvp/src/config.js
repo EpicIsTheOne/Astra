@@ -10,7 +10,9 @@ export const cfg = {
   ttsProvider: (process.env.TTS_PROVIDER || 'openai').toLowerCase(),
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiTtsModel: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
-  openaiTtsVoice: process.env.OPENAI_TTS_VOICE || 'alloy',
+  openaiTtsVoice: process.env.OPENAI_TTS_VOICE || 'nova',
   elevenlabsApiKey: process.env.ELEVENLABS_API_KEY || '',
-  elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || ''
+  elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID || '',
+  punishmentEnabled: (process.env.PUNISHMENT_ENABLED || 'true').toLowerCase() === 'true',
+  punishmentMinutes: Number(process.env.PUNISHMENT_MINUTES || 5)
 };

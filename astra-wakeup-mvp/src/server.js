@@ -17,6 +17,7 @@ app.use(express.static('public'));
 
 let state = loadState();
 let snoozeTimer = null;
+let punishmentTimer = null;
 
 async function renderTts(text) {
   fs.mkdirSync('data', { recursive: true });
@@ -35,6 +36,21 @@ async function renderTts(text) {
   return maybeMixWithSfx(outPath);
 }
 
+function schedulePunishment() {
+  if (!cfg.punishmentEnabled) return;
+  if (punishmentTimer) clearTimeout(punishmentTimer);
+
+  punishmentTimer = setTimeout(async () => {
+    if (!state.pendingWake) return;
+    try {
+      await fireWakeup('punishment');
+      console.log('[wake] punishment blast delivered');
+    } catch (err) {
+      console.error('[wake] punishment failed', err.message || err);
+    }
+  }, cfg.punishmentMinutes * 60 * 1000);
+}
+
 async function fireWakeup(reason = 'scheduled') {
   const mode = ['flirty', 'savage', 'gremlin'][Math.floor(Math.random() * 3)];
   const line = buildWakeLine(cfg.wakeUserName, mode);
@@ -51,6 +67,7 @@ async function fireWakeup(reason = 'scheduled') {
   state.lastWakeAt = new Date().toISOString();
   state.pendingWake = true;
   saveState(state);
+  schedulePunishment();
 
   return { ok: true, line, mode, messageId: msg.id };
 }
@@ -70,6 +87,7 @@ app.post('/api/wakeup/ack', (_req, res) => {
   state.streak += 1;
   state.lastAckAt = new Date().toISOString();
   state.pendingWake = false;
+  if (punishmentTimer) clearTimeout(punishmentTimer);
   saveState(state);
   res.json({ ok: true, streak: state.streak });
 });
