@@ -77,6 +77,27 @@
         android:text=""
         android:textSize="12sp" />
 
+    <TextView
+        android:id="@+id/tvHealthChip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="health: -"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tvLineChip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="line: -"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/tvChatChip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="chat: -"
+        android:textSize="12sp" />
+
     <Button
         android:id="@+id/btnSchedule"
         android:layout_width="match_parent"

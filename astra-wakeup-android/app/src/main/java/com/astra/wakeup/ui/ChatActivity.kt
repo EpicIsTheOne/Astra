@@ -10,6 +10,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -26,6 +27,9 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var callMode = false
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var tvCall: TextView
+    private var pendingResumeAfterTts = false
+    private var lastInputForResume: EditText? = null
+    private var lastChatForResume: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +66,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 startSpeechInput(etInput, tvChat, singleShot = false)
             } else {
                 btnCall.text = "Start Call"
+                pendingResumeAfterTts = false
                 setCallStatus("idle")
                 recognizer?.cancel()
                 stopService(Intent(this, CallForegroundService::class.java))
@@ -76,6 +81,15 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             tts?.language = Locale.US
             tts?.setPitch(1.1f)
             tts?.setSpeechRate(1.0f)
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+                override fun onError(utteranceId: String?) {
+                    maybeResumeListeningAfterTts()
+                }
+                override fun onDone(utteranceId: String?) {
+                    maybeResumeListeningAfterTts()
+                }
+            })
         }
     }
 
@@ -96,17 +110,28 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (fromCall) setCallStatus("speaking…")
                 speak(reply)
                 if (fromCall && callMode) {
-                    handler.postDelayed({
-                        val input = findViewById<EditText>(R.id.etChatInput)
-                        startSpeechInput(input, tv, singleShot = false)
-                    }, 900)
+                    pendingResumeAfterTts = true
+                    lastInputForResume = findViewById(R.id.etChatInput)
+                    lastChatForResume = tv
                 }
             }
         }.start()
     }
 
     private fun speak(text: String) {
-        if (ttsReady) tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "chat")
+        if (!ttsReady) return
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "chat-turn")
+    }
+
+    private fun maybeResumeListeningAfterTts() {
+        runOnUiThread {
+            if (!callMode || !pendingResumeAfterTts) return@runOnUiThread
+            val input = lastInputForResume ?: return@runOnUiThread
+            val chat = lastChatForResume ?: return@runOnUiThread
+            pendingResumeAfterTts = false
+            setCallStatus("listening…")
+            startSpeechInput(input, chat, singleShot = false)
+        }
     }
 
     private fun startSpeechInput(etInput: EditText, tvChat: TextView, singleShot: Boolean) {

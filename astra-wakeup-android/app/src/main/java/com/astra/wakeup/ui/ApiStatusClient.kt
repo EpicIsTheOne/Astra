@@ -7,7 +7,10 @@ import java.net.URL
 data class ApiSuiteStatus(
     val ok: Boolean,
     val summary: String,
-    val details: String
+    val details: String,
+    val healthOk: Boolean,
+    val lineOk: Boolean,
+    val chatOk: Boolean
 )
 
 object ApiStatusClient {
@@ -34,7 +37,7 @@ object ApiStatusClient {
     }
 
     fun checkSuite(apiUrl: String): ApiSuiteStatus {
-        if (apiUrl.isBlank()) return ApiSuiteStatus(false, "offline ❌", "No API URL")
+        if (apiUrl.isBlank()) return ApiSuiteStatus(false, "offline ❌", "No API URL", false, false, false)
 
         val (hOk, hMsg) = get(ApiEndpoints.health(apiUrl))
         val lineOk = WakeMessageClient.fetchLine(apiUrl, punishment = false) != null
@@ -44,6 +47,6 @@ object ApiStatusClient {
         val allOk = hOk && lineOk && chatOk
         val details = "health=${if (hOk) "ok" else hMsg}, line=${if (lineOk) "ok" else "fail"}, chat=${if (chatOk) "ok" else (chat.error ?: "fail")}".take(180)
         val summary = if (allOk) "connected ✅" else "partial/offline ❌"
-        return ApiSuiteStatus(allOk, summary, details)
+        return ApiSuiteStatus(allOk, summary, details, hOk, lineOk, chatOk)
     }
 }

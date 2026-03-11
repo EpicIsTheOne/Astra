@@ -22,6 +22,9 @@ class MainActivity : AppCompatActivity() {
         val cbPunish = findViewById<CheckBox>(R.id.cbPunish)
         val tvApiStatus = findViewById<TextView>(R.id.tvApiStatus)
         val tvApiDetails = findViewById<TextView>(R.id.tvApiDetails)
+        val tvHealthChip = findViewById<TextView>(R.id.tvHealthChip)
+        val tvLineChip = findViewById<TextView>(R.id.tvLineChip)
+        val tvChatChip = findViewById<TextView>(R.id.tvChatChip)
 
         etApiUrl.setText(prefs.getString("api_url", "http://72.60.29.204:8787/api/astra"))
         cbRandomSfx.isChecked = prefs.getBoolean("random_sfx", true)
@@ -44,11 +47,17 @@ class MainActivity : AppCompatActivity() {
             val apiUrl = etApiUrl.text.toString().trim()
             tvApiStatus.text = "API status: checking..."
             tvApiDetails.text = ""
+            tvHealthChip.text = "health: ..."
+            tvLineChip.text = "line: ..."
+            tvChatChip.text = "chat: ..."
             Thread {
                 val suite = ApiStatusClient.checkSuite(apiUrl)
                 runOnUiThread {
                     tvApiStatus.text = "API status: ${suite.summary}"
                     tvApiDetails.text = suite.details
+                    tvHealthChip.text = "health: ${if (suite.healthOk) "✅" else "❌"}"
+                    tvLineChip.text = "line: ${if (suite.lineOk) "✅" else "❌"}"
+                    tvChatChip.text = "chat: ${if (suite.chatOk) "✅" else "❌"}"
                 }
             }.start()
         }
