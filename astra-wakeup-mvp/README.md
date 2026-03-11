@@ -26,6 +26,7 @@ A local Node app that generates a sassy wake-up line, renders TTS audio, optiona
 - `POST /api/wakeup/fire` => generate + send wakeup now
 - `POST /api/wakeup/ack` => mark user awake, increment streak
 - `POST /api/wakeup/snooze` => schedule one-off wakeup in X minutes
+- `POST /api/wakeup/line` => returns dynamic Astra wake line (OpenAI-backed)
 - `GET /api/state` => current streak/state
 
 ## Notes

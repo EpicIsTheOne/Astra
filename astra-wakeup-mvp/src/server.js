@@ -19,6 +19,39 @@ let state = loadState();
 let snoozeTimer = null;
 let punishmentTimer = null;
 
+async function getDynamicWakeLine({ punishment = false } = {}) {
+  if (!cfg.openaiApiKey) return null;
+
+  const system = "You are Astra, a sassy anime-girl assistant waking up user Epic. Keep it short: 4-12 words. No emojis.";
+  const user = punishment
+    ? "Generate an aggressive wake-up line. Use words like 'wake up', 'now', 'dumbass' sometimes."
+    : "Generate a playful wake-up line for morning.";
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.openaiApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        temperature: 0.9,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user }
+        ]
+      })
+    });
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.choices?.[0]?.message?.content?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function renderTts(text) {
   fs.mkdirSync('data', { recursive: true });
   const outPath = path.resolve('data/out-voice.mp3');
@@ -75,6 +108,14 @@ async function fireWakeup(reason = 'scheduled') {
 }
 
 app.get('/api/state', (_req, res) => res.json(state));
+
+app.post('/api/wakeup/line', async (req, res) => {
+  const punishment = Boolean(req.body?.punishment);
+  const aiLine = await getDynamicWakeLine({ punishment });
+  const mode = punishment ? 'savage' : ['flirty', 'savage', 'gremlin'][Math.floor(Math.random() * 3)];
+  const line = aiLine || buildWakeLine(cfg.wakeUserName, mode);
+  res.json({ ok: true, line, mode, source: aiLine ? 'openai' : 'local' });
+});
 
 app.post('/api/wakeup/fire', async (_req, res) => {
   try {

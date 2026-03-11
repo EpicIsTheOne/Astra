@@ -5,14 +5,19 @@ Yes, this is the real Android app scaffold for Astra wake-ups at **5:50 AM ET**.
 ## What it does now
 - Schedules an exact daily alarm for 5:50 AM (America/New_York).
 - Opens a full-screen wake activity at alarm time.
-- Plays system alarm sound now (placeholder until Astra TTS audio is wired).
+- Uses Android TTS (female-ish pitched voice) to read wake lines.
+- Fetches dynamic lines from OpenClaw wake API (`/api/wakeup/line`).
+- Punishment loop: repeats taunts + random SFX until acknowledged.
 - Supports **I'm awake** and **Snooze 10 min**.
 - Reschedules after reboot.
 
-## What still needs to be wired
-- Replace placeholder audio with generated Astra TTS (female voice).
-- Add punishment mode timer (2nd louder blast if no ack).
-- Build + sign APK.
+## OpenClaw connection
+In app settings, set API URL to your reachable OpenClaw wake endpoint, e.g.:
+`http://<server-ip>:8787/api/wakeup/line`
+
+## Still TODO
+- Bundle custom SFX pack and volume profiles.
+- Build + sign release APK.
 
 ## Build prerequisites (on a machine with Android SDK)
 - Java 17
