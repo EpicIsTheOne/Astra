@@ -16,6 +16,8 @@
         android:label="Astra Wake-Up"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.AstraWakeUp">
 
         <activity
