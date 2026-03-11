@@ -83,6 +83,36 @@ class CalendarActivity : AppCompatActivity() {
             }.start()
         }
 
+        findViewById<Button>(R.id.btnCronEnable).setOnClickListener {
+            Thread {
+                val (ok, msg) = ApiCalendarClient.toggle(apiUrl, etId.text.toString().trim(), enabled = true)
+                runOnUiThread {
+                    Toast.makeText(this, if (ok) "Cron enabled" else "Enable failed: $msg", Toast.LENGTH_SHORT).show()
+                    if (ok) refresh()
+                }
+            }.start()
+        }
+
+        findViewById<Button>(R.id.btnCronDisable).setOnClickListener {
+            Thread {
+                val (ok, msg) = ApiCalendarClient.toggle(apiUrl, etId.text.toString().trim(), enabled = false)
+                runOnUiThread {
+                    Toast.makeText(this, if (ok) "Cron disabled" else "Disable failed: $msg", Toast.LENGTH_SHORT).show()
+                    if (ok) refresh()
+                }
+            }.start()
+        }
+
+        findViewById<Button>(R.id.btnCronRunNow).setOnClickListener {
+            Thread {
+                val (ok, msg) = ApiCalendarClient.runNow(apiUrl, etId.text.toString().trim())
+                runOnUiThread {
+                    Toast.makeText(this, if (ok) "Cron run triggered" else "Run failed: $msg", Toast.LENGTH_SHORT).show()
+                    if (ok) refresh()
+                }
+            }.start()
+        }
+
         findViewById<Button>(R.id.btnRefreshCalendar).setOnClickListener { refresh() }
         refresh()
     }

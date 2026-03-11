@@ -113,4 +113,39 @@ object ApiCalendarClient {
             true to "deleted"
         }.getOrElse { false to (it.message ?: "network error") }
     }
+
+    fun toggle(apiUrl: String, id: String, enabled: Boolean): Pair<Boolean, String> {
+        return runCatching {
+            val conn = URL(ApiEndpoints.normalizeBase(apiUrl) + "/cron/toggle").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 7000
+            conn.readTimeout = 7000
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = JSONObject().apply {
+                put("id", id)
+                put("enabled", enabled)
+            }
+            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+            val code = conn.responseCode
+            if (code !in 200..299) return false to "HTTP $code"
+            true to if (enabled) "enabled" else "disabled"
+        }.getOrElse { false to (it.message ?: "network error") }
+    }
+
+    fun runNow(apiUrl: String, id: String): Pair<Boolean, String> {
+        return runCatching {
+            val conn = URL(ApiEndpoints.normalizeBase(apiUrl) + "/cron/run").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 7000
+            conn.readTimeout = 12000
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = JSONObject().apply { put("id", id) }
+            OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
+            val code = conn.responseCode
+            if (code !in 200..299) return false to "HTTP $code"
+            true to "ran"
+        }.getOrElse { false to (it.message ?: "network error") }
+    }
 }

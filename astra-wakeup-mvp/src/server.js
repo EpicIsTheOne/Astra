@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import express from 'express';
 import cron from 'node-cron';
 
@@ -389,6 +389,33 @@ app.post('/api/astra/cron/delete', (req, res) => {
   try {
     execFileSync('openclaw', ['cron', 'remove', id], { encoding: 'utf8' });
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.post('/api/astra/cron/toggle', (req, res) => {
+  const id = String(req.body?.id || '').trim();
+  const enabled = Boolean(req.body?.enabled);
+  if (!id) return res.status(400).json({ ok: false, error: 'id required' });
+  try {
+    execFileSync('openclaw', ['cron', 'edit', id, enabled ? '--enable' : '--disable'], { encoding: 'utf8' });
+    res.json({ ok: true, enabled });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.post('/api/astra/cron/run', (req, res) => {
+  const id = String(req.body?.id || '').trim();
+  if (!id) return res.status(400).json({ ok: false, error: 'id required' });
+  try {
+    const child = spawn('openclaw', ['cron', 'run', id], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+    res.json({ ok: true, queued: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
