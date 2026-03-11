@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.astra.wakeup.R
@@ -19,6 +20,7 @@ class MainActivity : AppCompatActivity() {
         val etApiUrl = findViewById<EditText>(R.id.etApiUrl)
         val cbRandomSfx = findViewById<CheckBox>(R.id.cbRandomSfx)
         val cbPunish = findViewById<CheckBox>(R.id.cbPunish)
+        val tvApiStatus = findViewById<TextView>(R.id.tvApiStatus)
 
         etApiUrl.setText(prefs.getString("api_url", "http://127.0.0.1:8787/api/wakeup/line"))
         cbRandomSfx.isChecked = prefs.getBoolean("random_sfx", true)
@@ -31,6 +33,17 @@ class MainActivity : AppCompatActivity() {
                 .putBoolean("punish", cbPunish.isChecked)
                 .apply()
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+        }
+
+        findViewById<Button>(R.id.btnCheckApi).setOnClickListener {
+            val apiUrl = etApiUrl.text.toString().trim()
+            tvApiStatus.text = "API status: checking..."
+            Thread {
+                val (ok, msg) = ApiStatusClient.check(apiUrl)
+                runOnUiThread {
+                    tvApiStatus.text = if (ok) "API status: connected ✅" else "API status: offline ❌ ($msg)"
+                }
+            }.start()
         }
 
         findViewById<Button>(R.id.btnSchedule).setOnClickListener {

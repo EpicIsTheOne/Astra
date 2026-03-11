@@ -49,6 +49,21 @@
         android:text="Save settings" />
 
     <Button
+        android:id="@+id/btnCheckApi"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Check server connection" />
+
+    <TextView
+        android:id="@+id/tvApiStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="API status: unknown"
+        android:textSize="14sp" />
+
+    <Button
         android:id="@+id/btnSchedule"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

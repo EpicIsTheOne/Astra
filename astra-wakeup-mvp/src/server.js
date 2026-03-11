@@ -107,6 +107,10 @@ async function fireWakeup(reason = 'scheduled') {
   return { ok: true, line, mode, messageId: msg.id };
 }
 
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'astra-wakeup-mvp', time: new Date().toISOString() });
+});
+
 app.get('/api/state', (_req, res) => res.json(state));
 
 app.post('/api/wakeup/line', async (req, res) => {

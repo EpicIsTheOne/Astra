@@ -6,8 +6,10 @@ import android.media.RingtoneManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
@@ -22,6 +24,8 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private val handler = Handler(Looper.getMainLooper())
     private var acknowledged = false
+    private var ttsReady = false
+    private var pendingSpeech: String? = null
 
     private val fallbackLines = listOf(
         "Wake up, Epic. Move now.",
@@ -74,8 +78,18 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             tts?.language = Locale.US
-            tts?.setPitch(1.2f)
-            tts?.setSpeechRate(1.0f)
+            tts?.setPitch(1.15f)
+            tts?.setSpeechRate(1.02f)
+            val femaleVoice = tts?.voices?.firstOrNull { v: Voice ->
+                val n = v.name.lowercase(Locale.US)
+                n.contains("female") || n.contains("fem") || n.contains("woman") || n.contains("girl")
+            }
+            if (femaleVoice != null) tts?.voice = femaleVoice
+            ttsReady = true
+            pendingSpeech?.let {
+                pendingSpeech = null
+                speakNow(it)
+            }
         }
     }
 
@@ -95,7 +109,18 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "wake-line")
+        if (!ttsReady) {
+            pendingSpeech = text
+            return
+        }
+        speakNow(text)
+    }
+
+    private fun speakNow(text: String) {
+        val params = android.os.Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+        }
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "wake-line")
     }
 
     private fun playRandomSfx() {
@@ -114,7 +139,9 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         ringtone?.streamType = AudioManager.STREAM_ALARM
         ringtone?.play()
 
-        (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.vibrate(longArrayOf(0, 400, 150, 600), -1)
+        (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.let { v ->
+            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 400, 150, 600), -1))
+        }
     }
 
     private fun schedulePunishmentLoop() {
