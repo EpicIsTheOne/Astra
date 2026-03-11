@@ -121,14 +121,8 @@ app.post('/api/wakeup/line', async (req, res) => {
   res.json({ ok: true, line, mode, source: aiLine ? 'openai' : 'local' });
 });
 
-app.post('/api/wakeup/respond', async (req, res) => {
-  const text = String(req.body?.text || '').slice(0, 280);
-  if (!text) return res.status(400).json({ ok: false, error: 'Missing text' });
-
-  if (!cfg.openaiApiKey) {
-    return res.json({ ok: true, reply: "Nope. You're awake now, no excuses." });
-  }
-
+async function generateAstraReply(text) {
+  if (!cfg.openaiApiKey) return "Nope. You're awake now, no excuses.";
   try {
     const chat = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -142,19 +136,32 @@ app.post('/api/wakeup/respond', async (req, res) => {
         messages: [
           {
             role: 'system',
-            content: "You are Astra, a sassy wake-up assistant. User just replied while half-asleep. Respond in 1 short sentence, teasing but useful, and push them to get up."
+            content: "You are Astra, a sassy assistant. Respond in 1-2 short sentences, playful teasing but helpful."
           },
           { role: 'user', content: text }
         ]
       })
     });
-
     const json = await chat.json();
-    const reply = json?.choices?.[0]?.message?.content?.trim() || "Cute excuse. Up. Now.";
-    res.json({ ok: true, reply });
+    return json?.choices?.[0]?.message?.content?.trim() || "Cute excuse. Up. Now.";
   } catch {
-    res.json({ ok: true, reply: "Nice try. Still waking up. Move." });
+    return "Nice try. Still waking up. Move.";
   }
+}
+
+app.post('/api/wakeup/respond', async (req, res) => {
+  const text = String(req.body?.text || '').slice(0, 280);
+  if (!text) return res.status(400).json({ ok: false, error: 'Missing text' });
+
+  const reply = await generateAstraReply(`User is waking up and said: ${text}`);
+  res.json({ ok: true, reply });
+});
+
+app.post('/api/chat/respond', async (req, res) => {
+  const text = String(req.body?.text || '').slice(0, 500);
+  if (!text) return res.status(400).json({ ok: false, error: 'Missing text' });
+  const reply = await generateAstraReply(text);
+  res.json({ ok: true, reply });
 });
 
 app.post('/api/wakeup/fire', async (_req, res) => {

@@ -26,6 +26,10 @@ class MainActivity : AppCompatActivity() {
         cbRandomSfx.isChecked = prefs.getBoolean("random_sfx", true)
         cbPunish.isChecked = prefs.getBoolean("punish", true)
 
+        findViewById<Button>(R.id.btnOpenChat).setOnClickListener {
+            startActivity(Intent(this, ChatActivity::class.java))
+        }
+
         findViewById<Button>(R.id.btnSave).setOnClickListener {
             prefs.edit()
                 .putString("api_url", etApiUrl.text.toString().trim())
