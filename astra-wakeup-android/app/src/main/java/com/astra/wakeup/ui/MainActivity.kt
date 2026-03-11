@@ -22,7 +22,7 @@ class MainActivity : AppCompatActivity() {
         val cbPunish = findViewById<CheckBox>(R.id.cbPunish)
         val tvApiStatus = findViewById<TextView>(R.id.tvApiStatus)
 
-        etApiUrl.setText(prefs.getString("api_url", "http://127.0.0.1:8787/api/wakeup/line"))
+        etApiUrl.setText(prefs.getString("api_url", "http://72.60.29.204:8787/api/astra"))
         cbRandomSfx.isChecked = prefs.getBoolean("random_sfx", true)
         cbPunish.isChecked = prefs.getBoolean("punish", true)
 

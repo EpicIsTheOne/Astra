@@ -10,7 +10,7 @@ object WakeMessageClient {
     fun fetchLine(apiUrl: String, punishment: Boolean): String? {
         if (apiUrl.isBlank()) return null
         return runCatching {
-            val conn = URL(apiUrl).openConnection() as HttpURLConnection
+            val conn = URL(ApiEndpoints.line(apiUrl)).openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.connectTimeout = 7000
             conn.readTimeout = 7000

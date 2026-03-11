@@ -113,13 +113,16 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/state', (_req, res) => res.json(state));
 
-app.post('/api/wakeup/line', async (req, res) => {
+async function astraLineHandler(req, res) {
   const punishment = Boolean(req.body?.punishment);
   const aiLine = await getDynamicWakeLine({ punishment });
   const mode = punishment ? 'savage' : ['flirty', 'savage', 'gremlin'][Math.floor(Math.random() * 3)];
   const line = aiLine || buildWakeLine(cfg.wakeUserName, mode);
   res.json({ ok: true, line, mode, source: aiLine ? 'openai' : 'local' });
-});
+}
+
+app.post('/api/wakeup/line', astraLineHandler);
+app.post('/api/astra/line', astraLineHandler);
 
 async function generateAstraReply(text) {
   if (!cfg.openaiApiKey) return "Nope. You're awake now, no excuses.";
@@ -149,19 +152,28 @@ async function generateAstraReply(text) {
   }
 }
 
-app.post('/api/wakeup/respond', async (req, res) => {
+async function astraWakeRespondHandler(req, res) {
   const text = String(req.body?.text || '').slice(0, 280);
   if (!text) return res.status(400).json({ ok: false, error: 'Missing text' });
 
   const reply = await generateAstraReply(`User is waking up and said: ${text}`);
   res.json({ ok: true, reply });
-});
+}
 
-app.post('/api/chat/respond', async (req, res) => {
+async function astraRespondHandler(req, res) {
   const text = String(req.body?.text || '').slice(0, 500);
   if (!text) return res.status(400).json({ ok: false, error: 'Missing text' });
   const reply = await generateAstraReply(text);
   res.json({ ok: true, reply });
+}
+
+app.post('/api/wakeup/respond', astraWakeRespondHandler);
+app.post('/api/astra/wake-respond', astraWakeRespondHandler);
+
+app.post('/api/chat/respond', astraRespondHandler);
+app.post('/api/astra/respond', astraRespondHandler);
+app.get('/api/astra/health', (_req, res) => {
+  res.json({ ok: true, service: 'astra', time: new Date().toISOString() });
 });
 
 app.post('/api/wakeup/fire', async (_req, res) => {

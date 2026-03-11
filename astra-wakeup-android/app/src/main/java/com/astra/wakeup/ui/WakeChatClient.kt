@@ -9,8 +9,7 @@ import java.net.URL
 object WakeChatClient {
     fun wakeReply(apiUrl: String, userText: String): String? {
         if (apiUrl.isBlank() || userText.isBlank()) return null
-        val base = apiUrl.substringBefore("/api/wakeup/line")
-        val chatUrl = if (base == apiUrl) "$apiUrl" else "$base/api/wakeup/respond"
+        val chatUrl = ApiEndpoints.wakeRespond(apiUrl)
 
         return runCatching {
             val conn = URL(chatUrl).openConnection() as HttpURLConnection
@@ -33,8 +32,7 @@ object WakeChatClient {
 
     fun chatReply(apiUrl: String, userText: String): String? {
         if (apiUrl.isBlank() || userText.isBlank()) return null
-        val base = apiUrl.substringBefore("/api/wakeup/line")
-        val chatUrl = if (base == apiUrl) "$apiUrl" else "$base/api/chat/respond"
+        val chatUrl = ApiEndpoints.chatRespond(apiUrl)
 
         return runCatching {
             val conn = URL(chatUrl).openConnection() as HttpURLConnection
