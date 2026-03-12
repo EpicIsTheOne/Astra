@@ -60,6 +60,7 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
 
         tts = TextToSpeech(this, this)
+        getSharedPreferences("astra", MODE_PRIVATE).edit().putLong("last_alarm_triggered_at", System.currentTimeMillis()).apply()
 
         playRandomSfx()
         loadDynamicLineAndSpeak(false)
@@ -73,12 +74,14 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         findViewById<Button>(R.id.btnAwake).setOnClickListener {
             acknowledged = true
+            getSharedPreferences("astra", MODE_PRIVATE).edit().putLong("last_alarm_dismissed_at", System.currentTimeMillis()).apply()
             stopAudio()
             finish()
         }
 
         findViewById<Button>(R.id.btnSnooze).setOnClickListener {
             acknowledged = true
+            getSharedPreferences("astra", MODE_PRIVATE).edit().putLong("last_alarm_dismissed_at", System.currentTimeMillis()).apply()
             stopAudio()
             AlarmScheduler.scheduleSnooze(this, 10)
             finish()

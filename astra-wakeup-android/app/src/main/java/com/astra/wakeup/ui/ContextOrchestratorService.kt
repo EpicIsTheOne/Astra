@@ -11,12 +11,14 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.provider.CalendarContract
 import androidx.core.app.NotificationCompat
 import com.astra.wakeup.R
 
 class ContextOrchestratorService : Service() {
     private lateinit var repo: ContextRuleRepository
     private lateinit var engine: ContextRuleEngine
+    private var headphonesConnected: Boolean = false
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -24,7 +26,14 @@ class ContextOrchestratorService : Service() {
             val event = when (action) {
                 Intent.ACTION_USER_PRESENT -> ContextEvent(TriggerType.PHONE_UNLOCK)
                 Intent.ACTION_POWER_CONNECTED, Intent.ACTION_POWER_DISCONNECTED -> ContextEvent(TriggerType.CHARGING_CHANGED)
-                Intent.ACTION_HEADSET_PLUG, AudioManagerCompat.ACTION_AUDIO_BECOMING_NOISY -> ContextEvent(TriggerType.HEADPHONE_CHANGED)
+                Intent.ACTION_HEADSET_PLUG -> {
+                    headphonesConnected = intent.getIntExtra("state", 0) == 1
+                    ContextEvent(TriggerType.HEADPHONE_CHANGED)
+                }
+                AudioManagerCompat.ACTION_AUDIO_BECOMING_NOISY -> {
+                    headphonesConnected = false
+                    ContextEvent(TriggerType.HEADPHONE_CHANGED)
+                }
                 Intent.ACTION_TIME_TICK -> ContextEvent(TriggerType.TIME_TICK)
                 else -> null
             } ?: return
@@ -69,9 +78,35 @@ class ContextOrchestratorService : Service() {
         val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
-        val personality = getSharedPreferences("astra", MODE_PRIVATE).getString("personality_mode", "coach") ?: "coach"
+        val prefs = getSharedPreferences("astra", MODE_PRIVATE)
+        val personality = prefs.getString("personality_mode", "coach") ?: "coach"
         val mode = runCatching { PersonalityMode.valueOf(personality.uppercase()) }.getOrDefault(PersonalityMode.COACH)
-        return ContextSnapshot(isCharging = charging, currentPersonality = mode)
+        val zone = prefs.getString("context_location_zone", null)
+        val lastTrig = prefs.getLong("last_alarm_triggered_at", 0L).takeIf { it > 0 }
+        val lastDismiss = prefs.getLong("last_alarm_dismissed_at", 0L).takeIf { it > 0 }
+        val nextEvent = nextCalendarEventMs()
+        return ContextSnapshot(
+            isCharging = charging,
+            headphonesConnected = headphonesConnected,
+            lastAlarmTriggeredAt = lastTrig,
+            lastAlarmDismissedAt = lastDismiss,
+            locationZoneId = zone,
+            nextCalendarEventMs = nextEvent,
+            currentPersonality = mode
+        )
+    }
+
+    private fun nextCalendarEventMs(): Long? {
+        return runCatching {
+            val now = System.currentTimeMillis()
+            val uri = CalendarContract.Events.CONTENT_URI
+            val projection = arrayOf(CalendarContract.Events.DTSTART)
+            val sel = "${CalendarContract.Events.DTSTART}>=?"
+            val args = arrayOf(now.toString())
+            contentResolver.query(uri, projection, sel, args, "${CalendarContract.Events.DTSTART} ASC")?.use { c ->
+                if (c.moveToFirst()) c.getLong(0) else null
+            }
+        }.getOrNull()
     }
 
     private fun ensureChannel() {

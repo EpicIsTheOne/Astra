@@ -14,6 +14,16 @@ class ContextConditionEvaluator {
             }
             "time_range" -> inTimeRange(condition.value)
             "location_zone" -> snapshot.locationZoneId == condition.value
+            "calendar_within_minutes" -> {
+                val mins = condition.value.toIntOrNull() ?: return false
+                val next = snapshot.nextCalendarEventMs ?: return false
+                (next - event.timestampMs) in 0..(mins * 60_000L)
+            }
+            "alarm_dismissed_recent" -> {
+                val mins = condition.value.toIntOrNull() ?: return false
+                val last = snapshot.lastAlarmDismissedAt ?: return false
+                (event.timestampMs - last) <= mins * 60_000L
+            }
             else -> true
         }
     }
