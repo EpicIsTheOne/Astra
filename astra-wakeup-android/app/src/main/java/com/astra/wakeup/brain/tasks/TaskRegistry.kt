@@ -16,4 +16,6 @@ object TaskRegistry {
             priority = 80
         )
     )
+
+    fun all(context: android.content.Context): List<Task> = defaults() + TaskStorage.list(context)
 }

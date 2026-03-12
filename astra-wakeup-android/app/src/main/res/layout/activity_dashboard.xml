@@ -12,6 +12,12 @@
         android:textSize="22sp"
         android:textStyle="bold" />
 
+    <Spinner
+        android:id="@+id/spSeverity"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:entries="@array/log_levels" />
+
     <TextView
         android:id="@+id/tvDashboard"
         android:layout_width="match_parent"

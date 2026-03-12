@@ -65,6 +65,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, DashboardActivity::class.java))
         }
 
+        findViewById<Button>(R.id.btnOpenTasks).setOnClickListener {
+            startActivity(Intent(this, TaskEditorActivity::class.java))
+        }
+
         findViewById<Button>(R.id.btnReleaseNotes).setOnClickListener {
             val apiUrl = etApiUrl.text.toString().trim()
             Thread {

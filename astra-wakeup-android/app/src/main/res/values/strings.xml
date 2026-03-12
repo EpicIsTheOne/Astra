@@ -36,4 +36,12 @@
         <item>ALARM_DISMISSED</item>
         <item>ALARM_TRIGGERED</item>
     </string-array>
+
+    <string-array name="log_levels">
+        <item>all</item>
+        <item>debug</item>
+        <item>info</item>
+        <item>warn</item>
+        <item>error</item>
+    </string-array>
 </resources>

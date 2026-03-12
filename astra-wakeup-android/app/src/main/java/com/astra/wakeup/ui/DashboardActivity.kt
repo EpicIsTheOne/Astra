@@ -2,9 +2,14 @@ package com.astra.wakeup.ui
 
 import android.os.Bundle
 import android.widget.Button
+import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.astra.wakeup.R
+import com.astra.wakeup.brain.BrainEventLog
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class DashboardActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -12,10 +17,18 @@ class DashboardActivity : AppCompatActivity() {
         setContentView(R.layout.activity_dashboard)
 
         val tv = findViewById<TextView>(R.id.tvDashboard)
+        val sp = findViewById<Spinner>(R.id.spSeverity)
 
         fun refresh() {
             val brain = getSharedPreferences("astra_brain", MODE_PRIVATE)
             val astra = getSharedPreferences("astra", MODE_PRIVATE)
+            val level = sp.selectedItem?.toString() ?: "all"
+            val logs = BrainEventLog.list(this, level)
+            val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
+            val timeline = if (logs.isEmpty()) "(no events)" else logs.joinToString("\n") {
+                "${fmt.format(Date(it.atMs))} [${it.level}] ${it.message}"
+            }
+
             val txt = buildString {
                 appendLine("Brain status")
                 appendLine("- last event: ${brain.getString("last_event", "-")}")
@@ -23,12 +36,15 @@ class DashboardActivity : AppCompatActivity() {
                 appendLine("- total rules: ${brain.getInt("total_rules", 0)}")
                 appendLine("- context rules: ${brain.getInt("context_rules", 0)}")
                 appendLine("- task rules: ${brain.getInt("task_rules", 0)}")
-                appendLine("- cron rules(cache): ${brain.getInt("cron_rules", 0)}")
+                appendLine("- cron rules: ${brain.getInt("cron_rules", 0)}")
                 appendLine()
                 appendLine("Runtime")
                 appendLine("- personality: ${astra.getString("personality_mode", "coach")}")
                 appendLine("- wake profile: ${astra.getString("wake_profile", "bully")}")
                 appendLine("- astra fm: ${astra.getBoolean("astra_fm", true)}")
+                appendLine()
+                appendLine("Timeline ($level)")
+                appendLine(timeline)
             }
             tv.text = txt
         }

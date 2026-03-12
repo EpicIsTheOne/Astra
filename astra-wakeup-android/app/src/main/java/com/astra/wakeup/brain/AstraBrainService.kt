@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.astra.wakeup.R
+import com.astra.wakeup.brain.BrainEventLog
 import com.astra.wakeup.brain.actions.ActionExecutor
 import com.astra.wakeup.brain.automation.AutomationHub
 import com.astra.wakeup.brain.memory.SharedPrefsMemoryStore
@@ -50,8 +51,10 @@ class AstraBrainService : Service() {
         scope.launch {
             EventBus.events.collectLatest { event ->
                 lastEvent = event.type
+                BrainEventLog.append(this@AstraBrainService, "info", "event: ${event.type}")
                 val decision = reasoner.decide(event)
                 lastDecision = decision.reason
+                BrainEventLog.append(this@AstraBrainService, "debug", "decision: ${decision.reason}")
                 decision.actions.forEach { executor.execute(it) }
                 hub.onEvent(event)
                 val st = hub.state(lastEvent, lastDecision)

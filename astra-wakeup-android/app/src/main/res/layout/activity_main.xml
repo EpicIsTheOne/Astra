@@ -62,6 +62,13 @@
         android:text="Astra Dashboard" />
 
     <Button
+        android:id="@+id/btnOpenTasks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Task Editor" />
+
+    <Button
         android:id="@+id/btnReleaseNotes"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
