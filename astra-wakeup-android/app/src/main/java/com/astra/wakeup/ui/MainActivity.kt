@@ -112,6 +112,18 @@ class MainActivity : AppCompatActivity() {
                 .apply()
         }
 
+        fun showConnectBanner(message: String? = null, backgroundColor: String = "#3F1D3B", textColor: String = "#FCE7F3") {
+            if (message.isNullOrBlank()) {
+                tvConnectBanner.visibility = android.view.View.GONE
+                tvConnectBanner.text = ""
+                return
+            }
+            tvConnectBanner.visibility = android.view.View.VISIBLE
+            tvConnectBanner.text = message
+            tvConnectBanner.setBackgroundColor(android.graphics.Color.parseColor(backgroundColor))
+            tvConnectBanner.setTextColor(android.graphics.Color.parseColor(textColor))
+        }
+
         fun httpBaseFromGatewayUrl(gatewayUrl: String): String {
             val trimmed = gatewayUrl.trim()
             if (trimmed.isBlank()) return ""
@@ -154,18 +166,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun isConnectedState(): Boolean = prefs.getBoolean("gateway_connected", false)
-
-        fun showConnectBanner(message: String? = null, backgroundColor: String = "#3F1D3B", textColor: String = "#FCE7F3") {
-            if (message.isNullOrBlank()) {
-                tvConnectBanner.visibility = android.view.View.GONE
-                tvConnectBanner.text = ""
-                return
-            }
-            tvConnectBanner.visibility = android.view.View.VISIBLE
-            tvConnectBanner.text = message
-            tvConnectBanner.setBackgroundColor(android.graphics.Color.parseColor(backgroundColor))
-            tvConnectBanner.setTextColor(android.graphics.Color.parseColor(textColor))
-        }
 
         fun refreshOpenChatButton() {
             val button = findViewById<Button>(R.id.btnOpenChat)
