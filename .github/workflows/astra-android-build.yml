@@ -146,16 +146,16 @@ jobs:
 
   publish-rolling-release:
     if: github.ref == 'refs/heads/main'
-    needs: build-signed-release-apk
+    needs: build-debug-apk
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Download signed release APK artifact
+      - name: Download debug APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: astra-signed-release-apk
+          name: astra-wakeup-debug-apk
           path: dist
 
       - name: Publish rolling pre-release
@@ -164,4 +164,4 @@ jobs:
           tag_name: astra-latest
           prerelease: true
           name: Astra Wake-Up (latest)
-          files: dist/app-release.apk
+          files: dist/app-debug.apk
