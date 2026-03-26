@@ -57,15 +57,27 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Tap Connect. If approval is needed, ask Astra to approve the pending Android pairing request."
+                android:text="Paste a pairing code for the easy path, or use the URL field below. If approval is needed, ask Astra to approve the pending Android pairing request."
                 android:textColor="#CBD5E1"
                 android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/etPairingCode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="#0B1220"
+                android:hint="Pairing code (recommended)"
+                android:padding="12dp"
+                android:singleLine="true"
+                android:textColor="#F8FAFC"
+                android:textColorHint="#64748B" />
 
             <EditText
                 android:id="@+id/etApiUrl"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="8dp"
                 android:background="#0B1220"
                 android:hint="OpenClaw URL"
                 android:padding="12dp"

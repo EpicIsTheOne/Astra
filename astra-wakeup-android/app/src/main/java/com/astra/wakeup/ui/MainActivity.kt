@@ -2,6 +2,7 @@ package com.astra.wakeup.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Base64
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -12,6 +13,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.astra.wakeup.R
 import com.astra.wakeup.alarm.AlarmScheduler
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,6 +21,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         val prefs = getSharedPreferences("astra", MODE_PRIVATE)
+        val etPairingCode = findViewById<EditText>(R.id.etPairingCode)
         val etApiUrl = findViewById<EditText>(R.id.etApiUrl)
         val cbRandomSfx = findViewById<CheckBox>(R.id.cbRandomSfx)
         val cbPunish = findViewById<CheckBox>(R.id.cbPunish)
@@ -39,8 +42,9 @@ class MainActivity : AppCompatActivity() {
         val btnToggleAdvancedGateway = findViewById<Button>(R.id.btnToggleAdvancedGateway)
         val btnConnectGateway = findViewById<Button>(R.id.btnConnectGateway)
 
-        val defaultExternalUrl = "http://72.60.29.204:8787/api/astra"
+        val defaultExternalUrl = "http://72.60.29.204:18789"
         val savedApiUrl = prefs.getString("api_url", null)?.takeIf { it.isNotBlank() }
+        etPairingCode.setText(prefs.getString("gateway_pairing_code", "") ?: "")
         etApiUrl.setText(savedApiUrl ?: defaultExternalUrl)
         etGatewayToken.setText(prefs.getString("gateway_token", "") ?: "")
         etBootstrapToken.setText(prefs.getString("gateway_bootstrap_token", "") ?: "")
@@ -92,11 +96,13 @@ class MainActivity : AppCompatActivity() {
 
         fun saveMainSettings() {
             val apiUrl = etApiUrl.text.toString().trim()
+            val pairingCode = etPairingCode.text.toString().trim()
             val gatewayToken = etGatewayToken.text.toString().trim()
             val bootstrapToken = etBootstrapToken.text.toString().trim()
             val wakeProfile = spWakeProfile.selectedItem.toString()
             prefs.edit()
                 .putString("api_url", apiUrl)
+                .putString("gateway_pairing_code", pairingCode)
                 .putString("gateway_token", gatewayToken)
                 .putString("gateway_bootstrap_token", bootstrapToken)
                 .putBoolean("random_sfx", cbRandomSfx.isChecked)
@@ -104,6 +110,43 @@ class MainActivity : AppCompatActivity() {
                 .putBoolean("astra_fm", cbAstraFm.isChecked)
                 .putString("wake_profile", wakeProfile)
                 .apply()
+        }
+
+        fun httpBaseFromGatewayUrl(gatewayUrl: String): String {
+            val trimmed = gatewayUrl.trim()
+            if (trimmed.isBlank()) return ""
+            val httpBase = trimmed
+                .replaceFirst("wss://", "https://")
+                .replaceFirst("ws://", "http://")
+            return if (httpBase.endsWith("/gateway")) httpBase.removeSuffix("/gateway") else httpBase
+        }
+
+        fun applyPairingCodeIfPresent(): Boolean {
+            val raw = etPairingCode.text.toString().trim()
+            if (raw.isBlank()) return false
+            return runCatching {
+                val normalized = raw.replace('-', '+').replace('_', '/')
+                val padded = normalized.padEnd(((normalized.length + 3) / 4) * 4, '=')
+                val decoded = String(Base64.decode(padded, Base64.DEFAULT), Charsets.UTF_8)
+                val payload = JSONObject(decoded)
+                val gatewayUrl = payload.optString("url").trim()
+                val bootstrapToken = payload.optString("bootstrapToken").trim()
+                val apiUrl = httpBaseFromGatewayUrl(gatewayUrl)
+                if (apiUrl.isBlank()) error("Missing gateway URL in pairing code")
+                etApiUrl.setText(apiUrl)
+                if (bootstrapToken.isNotBlank()) {
+                    etBootstrapToken.setText(bootstrapToken)
+                }
+                if (etGatewayToken.text.toString().trim().isBlank()) {
+                    etGatewayToken.setText("")
+                }
+                true
+            }.getOrElse {
+                showConnectBanner("That pairing code looks invalid. Paste a fresh one from OpenClaw.", backgroundColor = "#7F1D1D", textColor = "#FEE2E2")
+                tvApiStatus.text = "Status: pairing code invalid"
+                tvApiDetails.text = it.message ?: "Could not decode pairing code"
+                false
+            }
         }
 
         fun setConnectedState(connected: Boolean) {
@@ -135,6 +178,7 @@ class MainActivity : AppCompatActivity() {
         fun setConnectBusy(isBusy: Boolean, buttonLabel: String = "Connect this phone") {
             btnConnectGateway.isEnabled = !isBusy
             btnConnectGateway.text = buttonLabel
+            etPairingCode.isEnabled = !isBusy
             etApiUrl.isEnabled = !isBusy
         }
 
@@ -167,6 +211,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun connectThisPhone() {
+            if (etPairingCode.text.toString().trim().isNotBlank() && !applyPairingCodeIfPresent()) {
+                setConnectedState(false)
+                refreshOpenChatButton()
+                return
+            }
             saveMainSettings()
             val apiUrl = etApiUrl.text.toString().trim()
             if (apiUrl.isBlank()) {
@@ -174,7 +223,7 @@ class MainActivity : AppCompatActivity() {
                 refreshOpenChatButton()
                 showConnectBanner("Add your OpenClaw URL first.", backgroundColor = "#7C2D12", textColor = "#FFEDD5")
                 tvApiStatus.text = "Status: add your OpenClaw URL"
-                tvApiDetails.text = "Paste your external OpenClaw URL, then tap Connect this phone again."
+                tvApiDetails.text = "Paste your external OpenClaw URL or a pairing code, then tap Connect this phone again."
                 return
             }
 
@@ -211,6 +260,7 @@ class MainActivity : AppCompatActivity() {
                             showConnectBanner("Approval needed: ask Astra to approve the pending Android device, then tap Connect this phone again.", backgroundColor = "#7C2D12", textColor = "#FFEDD5")
                             tvApiStatus.text = "Status: waiting for approval ⏳"
                             tvApiDetails.text = "Approval is needed. Ask Astra to approve the pending Android device, then tap Connect this phone again."
+                            tvLineChip.text = "line: paired soon"
                             tvChatChip.text = "chat: waiting"
                         } else {
                             showConnectBanner("Connection failed. Check the URL or gateway auth, then try again.", backgroundColor = "#7F1D1D", textColor = "#FEE2E2")
