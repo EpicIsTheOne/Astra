@@ -140,11 +140,7 @@ object OpenClawGatewayAuthStore {
         val hasBootstrapToken = !prefs.getString("gateway_bootstrap_token", null).isNullOrBlank()
         val hasDeviceToken = !prefs.getString("gateway_device_token", null).isNullOrBlank()
         val role = prefs.getString("gateway_last_role", null).orEmpty()
-        return "shared=$hasSharedToken bootstrap=$hasBootstrapToken device=$hasDeviceToken role=${role.ifBlank { "?" }}"
+        val lastAuth = prefs.getString("gateway_last_auth_json", null).orEmpty().take(180)
+        return "shared=$hasSharedToken bootstrap=$hasBootstrapToken device=$hasDeviceToken role=${role.ifBlank { "?" }} lastAuth=${lastAuth.ifBlank { "-" }}"
     }
-}
-lank { "?" }} lastAuth=${lastAuth.ifBlank { "-" }}"
-    }
-}
- }
 }
