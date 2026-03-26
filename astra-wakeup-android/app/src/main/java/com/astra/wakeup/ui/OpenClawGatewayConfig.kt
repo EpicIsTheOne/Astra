@@ -89,6 +89,8 @@ object OpenClawGatewayAuthStore {
         val editor = context.getSharedPreferences(ASTRA_PREFS, Context.MODE_PRIVATE).edit()
         auth.optString("deviceToken").takeIf { it.isNotBlank() }?.let {
             editor.putString("gateway_device_token", it)
+            editor.remove("gateway_bootstrap_token")
+            editor.remove("gateway_pairing_code")
         }
         auth.optString("role").takeIf { it.isNotBlank() }?.let {
             editor.putString("gateway_last_role", it)
@@ -138,5 +140,8 @@ object OpenClawGatewayAuthStore {
         val hasDeviceToken = !prefs.getString("gateway_device_token", null).isNullOrBlank()
         val role = prefs.getString("gateway_last_role", null).orEmpty()
         return "shared=$hasSharedToken bootstrap=$hasBootstrapToken device=$hasDeviceToken role=${role.ifBlank { "?" }}"
+    }
+}
+ole.ifBlank { "?" }}"
     }
 }

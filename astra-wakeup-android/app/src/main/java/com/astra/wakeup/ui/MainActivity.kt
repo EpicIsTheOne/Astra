@@ -242,6 +242,9 @@ class MainActivity : AppCompatActivity() {
                         val server = session.helloPayload.optJSONObject("server")
                         val version = server?.optString("version").orEmpty().ifBlank { "unknown" }
                         val connId = server?.optString("connId").orEmpty().ifBlank { "?" }
+                        etPairingCode.setText("")
+                        etBootstrapToken.setText("")
+                        saveMainSettings()
                         setConnectedState(true)
                         refreshOpenChatButton()
                         showConnectBanner("Connected. Chat is unlocked and ready.", backgroundColor = "#14532D", textColor = "#DCFCE7")
