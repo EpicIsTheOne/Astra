@@ -3,6 +3,7 @@ package com.astra.wakeup.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,9 +12,17 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.method.ScrollingMovementMethod
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -28,9 +37,22 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var callMode = false
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var tvCall: TextView
+    private lateinit var tvChat: TextView
+    private lateinit var etInput: EditText
+    private lateinit var layoutTyping: LinearLayout
+    private lateinit var tvTyping: TextView
+    private lateinit var chatScroll: ScrollView
     private var pendingResumeAfterTts = false
-    private var lastInputForResume: EditText? = null
-    private var lastChatForResume: TextView? = null
+    private var typingDots = 0
+    private val typingTicker = object : Runnable {
+        override fun run() {
+            if (layoutTyping.visibility != android.view.View.VISIBLE) return
+            typingDots = (typingDots + 1) % 4
+            val dots = ".".repeat(typingDots).ifBlank { "…" }
+            tvTyping.text = "Astra is thinking$dots"
+            handler.postDelayed(this, 400)
+        }
+    }
     private val openClawChatClient = OpenClawChatClient()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,24 +61,30 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         tts = TextToSpeech(this, this)
 
-        val tvChat = findViewById<TextView>(R.id.tvChat)
-        val etInput = findViewById<EditText>(R.id.etChatInput)
+        tvChat = findViewById(R.id.tvChat)
+        etInput = findViewById(R.id.etChatInput)
         val btnCall = findViewById<Button>(R.id.btnCallToggle)
         val cbRemember = findViewById<CheckBox>(R.id.cbRemember)
         tvCall = findViewById(R.id.tvCallStatus)
+        layoutTyping = findViewById(R.id.layoutTyping)
+        tvTyping = findViewById(R.id.tvTyping)
+        chatScroll = tvChat.parent as ScrollView
+
+        tvChat.movementMethod = ScrollingMovementMethod()
+        appendMessage("Astra", "All right, I'm here. Try to keep up.", isAstra = true)
 
         findViewById<Button>(R.id.btnChatSend).setOnClickListener {
             val msg = etInput.text.toString().trim()
             if (msg.isNotBlank()) {
-                tvChat.append("\nYou: $msg")
+                appendMessage("You", msg, isAstra = false)
                 etInput.setText("")
-                askAstra(msg, tvChat, fromCall = false, remember = cbRemember.isChecked)
+                askAstra(msg, fromCall = false, remember = cbRemember.isChecked)
                 cbRemember.isChecked = false
             }
         }
 
         findViewById<Button>(R.id.btnChatTalk).setOnClickListener {
-            startSpeechInput(etInput, tvChat, singleShot = true)
+            startSpeechInput(singleShot = true)
         }
 
         btnCall.setOnClickListener {
@@ -64,15 +92,16 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (callMode) {
                 btnCall.text = "End Call"
                 setCallStatus("live 🎙️")
-                tvChat.append("\nAstra: Call connected. Try not to mumble.")
+                appendMessage("Astra", "Call connected. Try not to mumble.", isAstra = true)
                 speak("Call connected. Talk to me.")
                 startService(Intent(this, CallForegroundService::class.java))
-                startSpeechInput(etInput, tvChat, singleShot = false)
+                startSpeechInput(singleShot = false)
             } else {
                 btnCall.text = "Start Call"
                 pendingResumeAfterTts = false
                 setCallStatus("idle")
                 recognizer?.cancel()
+                stopTyping()
                 stopService(Intent(this, CallForegroundService::class.java))
                 speak("Call ended.")
             }
@@ -97,13 +126,47 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun appendMessage(speaker: String, message: String, isAstra: Boolean) {
+        val speakerColor = if (isAstra) Color.parseColor("#F472B6") else Color.parseColor("#60A5FA")
+        val bodyColor = if (isAstra) Color.parseColor("#FCE7F3") else Color.parseColor("#E5E7EB")
+        val prefix = "$speaker: "
+        val line = SpannableStringBuilder()
+        if (tvChat.text.isNotEmpty()) line.append("\n\n")
+
+        val prefixSpan = SpannableString(prefix).apply {
+            setSpan(ForegroundColorSpan(speakerColor), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(StyleSpan(android.graphics.Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        val bodySpan = SpannableString(message).apply {
+            setSpan(ForegroundColorSpan(bodyColor), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+
+        line.append(prefixSpan)
+        line.append(bodySpan)
+        tvChat.append(line)
+        chatScroll.post { chatScroll.fullScroll(android.view.View.FOCUS_DOWN) }
+    }
+
     private fun setCallStatus(state: String) {
         tvCall.text = "Call: $state"
     }
 
-    private fun askAstra(text: String, tv: TextView, fromCall: Boolean, remember: Boolean = false) {
+    private fun startTyping() {
+        typingDots = 0
+        layoutTyping.visibility = android.view.View.VISIBLE
+        handler.removeCallbacks(typingTicker)
+        handler.post(typingTicker)
+    }
+
+    private fun stopTyping() {
+        handler.removeCallbacks(typingTicker)
+        layoutTyping.visibility = android.view.View.GONE
+    }
+
+    private fun askAstra(text: String, fromCall: Boolean, remember: Boolean = false) {
         val gatewayConfig = OpenClawGatewayConfig.fromContext(this)
         if (fromCall) setCallStatus("thinking…")
+        startTyping()
 
         Thread {
             if (remember) {
@@ -115,13 +178,12 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
             val reply = result.reply ?: "Network tantrum: ${result.error ?: "unknown"}"
             runOnUiThread {
-                tv.append("\nAstra: $reply")
+                stopTyping()
+                appendMessage("Astra", reply, isAstra = true)
                 if (fromCall) setCallStatus("speaking…")
                 speak(reply)
                 if (fromCall && callMode) {
                     pendingResumeAfterTts = true
-                    lastInputForResume = findViewById(R.id.etChatInput)
-                    lastChatForResume = tv
                 }
             }
         }.start()
@@ -135,15 +197,13 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun maybeResumeListeningAfterTts() {
         runOnUiThread {
             if (!callMode || !pendingResumeAfterTts) return@runOnUiThread
-            val input = lastInputForResume ?: return@runOnUiThread
-            val chat = lastChatForResume ?: return@runOnUiThread
             pendingResumeAfterTts = false
             setCallStatus("listening…")
-            startSpeechInput(input, chat, singleShot = false)
+            startSpeechInput(singleShot = false)
         }
     }
 
-    private fun startSpeechInput(etInput: EditText, tvChat: TextView, singleShot: Boolean) {
+    private fun startSpeechInput(singleShot: Boolean) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -151,7 +211,6 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        // turn-taking: stop TTS while user speaks (barge-in)
         tts?.stop()
 
         recognizer?.destroy()
@@ -167,20 +226,20 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             override fun onError(error: Int) {
                 if (!singleShot && callMode) {
                     setCallStatus("reconnecting…")
-                    handler.postDelayed({ startSpeechInput(etInput, tvChat, singleShot = false) }, 1000)
+                    handler.postDelayed({ startSpeechInput(singleShot = false) }, 1000)
                 }
             }
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
             override fun onResults(results: Bundle?) {
-                val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty().trim()
                 etInput.setText(heard)
                 if (heard.isNotBlank()) {
-                    tvChat.append("\nYou: $heard")
-                    askAstra(heard, tvChat, fromCall = !singleShot, remember = false)
+                    appendMessage("You", heard, isAstra = false)
+                    askAstra(heard, fromCall = !singleShot, remember = false)
                 } else if (!singleShot && callMode) {
                     setCallStatus("listening…")
-                    handler.postDelayed({ startSpeechInput(etInput, tvChat, singleShot = false) }, 800)
+                    handler.postDelayed({ startSpeechInput(singleShot = false) }, 800)
                 }
             }
         })
@@ -195,6 +254,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         callMode = false
+        stopTyping()
         recognizer?.destroy()
         tts?.shutdown()
         stopService(Intent(this, CallForegroundService::class.java))

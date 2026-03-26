@@ -2,48 +2,65 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="#120A21"
     android:gravity="center"
     android:orientation="vertical"
     android:padding="24dp">
 
     <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Wake up protocol"
+        android:textAllCaps="true"
+        android:textColor="#F9A8D4"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
         android:id="@+id/tvLine"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
         android:gravity="center"
         android:text="Wake up, sleepy disaster."
         android:textColor="#FFFFFF"
         android:textSize="28sp"
         android:textStyle="bold" />
 
+    <TextView
+        android:id="@+id/tvTranscript"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:text="You: ..."
+        android:textColor="#D8B4FE"
+        android:textSize="15sp" />
+
     <Button
         android:id="@+id/btnTalk"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="Talk to Astra" />
-
-    <TextView
-        android:id="@+id/tvTranscript"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="#D1D5DB"
-        android:textSize="14sp"
-        android:text="You: ..." />
+        android:backgroundTint="#EC4899"
+        android:text="Talk back"
+        android:textColor="#FFFFFF" />
 
     <Button
         android:id="@+id/btnAwake"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
-        android:text="I'm awake" />
+        android:backgroundTint="#8B5CF6"
+        android:text="I'm awake"
+        android:textColor="#FFFFFF" />
 
     <Button
         android:id="@+id/btnSnooze"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="Snooze 10 min" />
+        android:backgroundTint="#475569"
+        android:text="Snooze 10 min"
+        android:textColor="#FFFFFF" />
 </LinearLayout>

@@ -29,6 +29,13 @@ object AlarmScheduler {
         )
     }
 
+    fun scheduleFromPrefs(context: Context) {
+        val prefs = context.getSharedPreferences("astra", Context.MODE_PRIVATE)
+        val hour = prefs.getInt("wake_hour", 5)
+        val minute = prefs.getInt("wake_minute", 50)
+        scheduleDaily(context, hour, minute)
+    }
+
     fun scheduleSnooze(context: Context, minutes: Int = 10) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pending = wakeIntent(context)

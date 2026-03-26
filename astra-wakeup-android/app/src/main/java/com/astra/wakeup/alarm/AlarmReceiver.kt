@@ -12,6 +12,6 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         context.startActivity(wakeIntent)
 
-        AlarmScheduler.scheduleDaily(context) // schedule next day
+        AlarmScheduler.scheduleFromPrefs(context)
     }
 }

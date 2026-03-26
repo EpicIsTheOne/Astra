@@ -15,6 +15,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.view.WindowManager
 import android.widget.Button
@@ -34,18 +35,20 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var acknowledged = false
     private var ttsReady = false
     private var pendingSpeech: String? = null
+    private var conversationMode = true
+    private var pendingResumeListeningAfterTts = false
+    private var isListening = false
 
     private val fallbackLines = listOf(
-        "Wake up, Epic. Move now.",
-        "Wake up, dumbass. Right now.",
-        "Wake up~ now, sleepy chaos goblin."
+        "Epic. Wake up. I'm not doing this alone.",
+        "Good morning, menace. Open your eyes and prove you're alive.",
+        "Rise and shine, sleepy disaster. Yes, this is me being nice."
     )
 
     private val punishmentShots = listOf(
-        "Wake up dumbass.",
-        "Wake up~",
-        "Now.",
-        "Up. Now."
+        "Nope. We're still doing this. Talk to me.",
+        "You are not awake yet. Try again, gremlin.",
+        "Cute attempt. Sit up and answer me."
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,7 +72,8 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (prefs.getBoolean("punish", true)) schedulePunishmentLoop()
 
         findViewById<Button>(R.id.btnTalk).setOnClickListener {
-            startListeningWithVAD()
+            conversationMode = true
+            startListeningWithVAD(force = true)
         }
 
         findViewById<Button>(R.id.btnAwake).setOnClickListener {
@@ -91,18 +95,22 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             tts?.language = Locale.US
-            val profile = getSharedPreferences("astra", MODE_PRIVATE).getString("wake_profile", "bully") ?: "bully"
-            when (profile) {
-                "gentle" -> { tts?.setPitch(1.0f); tts?.setSpeechRate(0.95f) }
-                "normal" -> { tts?.setPitch(1.08f); tts?.setSpeechRate(1.0f) }
-                "nuclear" -> { tts?.setPitch(1.25f); tts?.setSpeechRate(1.08f) }
-                else -> { tts?.setPitch(1.15f); tts?.setSpeechRate(1.02f) }
-            }
+            tts?.setPitch(1.12f)
+            tts?.setSpeechRate(1.0f)
             val femaleVoice = tts?.voices?.firstOrNull { v: Voice ->
                 val n = v.name.lowercase(Locale.US)
                 n.contains("female") || n.contains("fem") || n.contains("woman") || n.contains("girl")
             }
             if (femaleVoice != null) tts?.voice = femaleVoice
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+                override fun onError(utteranceId: String?) {
+                    maybeResumeListeningAfterTts()
+                }
+                override fun onDone(utteranceId: String?) {
+                    maybeResumeListeningAfterTts()
+                }
+            })
             ttsReady = true
             pendingSpeech?.let {
                 pendingSpeech = null
@@ -114,35 +122,36 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun loadDynamicLineAndSpeak(punishment: Boolean) {
         val prefs = getSharedPreferences("astra", MODE_PRIVATE)
         val apiUrl = prefs.getString("api_url", "") ?: ""
-        val wakeProfile = prefs.getString("wake_profile", "bully") ?: "bully"
         val astraFm = prefs.getBoolean("astra_fm", true)
 
         Thread {
             val fmScript = if (!punishment && astraFm) {
-                WakeMessageClient.fetchFmResult(apiUrl, wakeProfile)?.script
+                WakeMessageClient.fetchFmResult(apiUrl)?.script
             } else null
 
             if (!fmScript.isNullOrBlank()) {
                 runOnUiThread {
                     findViewById<TextView>(R.id.tvLine).text = fmScript
-                    speak(fmScript)
+                    speak(fmScript, resumeConversation = true)
                 }
                 return@Thread
             }
 
-            val result = WakeMessageClient.fetchLineResult(apiUrl, punishment, wakeProfile)
+            val result = WakeMessageClient.fetchLineResult(apiUrl, punishment)
             val line = result?.line ?: if (punishment) punishmentShots.random() else fallbackLines.random()
             val mission = result?.mission
 
             runOnUiThread {
                 val display = if (!mission.isNullOrBlank() && !punishment) "$line\n\nMission: $mission" else line
                 findViewById<TextView>(R.id.tvLine).text = display
-                speak(line)
+                speak(line, resumeConversation = true)
             }
         }.start()
     }
 
-    private fun startListeningWithVAD() {
+    private fun startListeningWithVAD(force: Boolean = false) {
+        if (acknowledged || (!force && (!conversationMode || isListening))) return
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -151,7 +160,7 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            speak("Speech recognition isn't available on this phone.")
+            speak("Speech recognition isn't available on this phone.", resumeConversation = false)
             return
         }
 
@@ -159,6 +168,7 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         recognizer = SpeechRecognizer.createSpeechRecognizer(this)
         val transcriptView = findViewById<TextView>(R.id.tvTranscript)
         transcriptView.text = "You: listening..."
+        isListening = true
 
         recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
@@ -167,11 +177,16 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onError(error: Int) {
+                isListening = false
                 transcriptView.text = "You: (didn't catch that)"
+                if (!acknowledged && conversationMode) {
+                    handler.postDelayed({ startListeningWithVAD() }, 900)
+                }
             }
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
             override fun onResults(results: Bundle?) {
+                isListening = false
                 val heard = results
                     ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()
@@ -180,6 +195,9 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
                 if (heard.isBlank()) {
                     transcriptView.text = "You: ..."
+                    if (!acknowledged && conversationMode) {
+                        handler.postDelayed({ startListeningWithVAD() }, 700)
+                    }
                     return
                 }
 
@@ -204,19 +222,22 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun respondToUserSpeech(userText: String) {
         val prefs = getSharedPreferences("astra", MODE_PRIVATE)
         val apiUrl = prefs.getString("api_url", "") ?: ""
+        val lineView = findViewById<TextView>(R.id.tvLine)
+        lineView.text = "Astra is thinking…"
 
         Thread {
             val reply = WakeChatClient.wakeReply(this, apiUrl, userText)
-                ?: "Nice try. You're still waking up now."
+                ?: "Nice try. You're still waking up now. Sit up and answer me properly."
 
             runOnUiThread {
-                findViewById<TextView>(R.id.tvLine).text = reply
-                speak(reply)
+                lineView.text = reply
+                speak(reply, resumeConversation = true)
             }
         }.start()
     }
 
-    private fun speak(text: String) {
+    private fun speak(text: String, resumeConversation: Boolean) {
+        pendingResumeListeningAfterTts = resumeConversation && conversationMode && !acknowledged
         if (!ttsReady) {
             pendingSpeech = text
             return
@@ -231,18 +252,23 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "wake-line")
     }
 
+    private fun maybeResumeListeningAfterTts() {
+        runOnUiThread {
+            if (acknowledged || !pendingResumeListeningAfterTts) return@runOnUiThread
+            pendingResumeListeningAfterTts = false
+            handler.postDelayed({ startListeningWithVAD() }, 450)
+        }
+    }
+
     private fun playRandomSfx() {
         val prefs = getSharedPreferences("astra", MODE_PRIVATE)
         if (!prefs.getBoolean("random_sfx", true)) return
-        val profile = prefs.getString("wake_profile", "bully") ?: "bully"
 
-        val typeChoices = when (profile) {
-            "gentle" -> listOf(RingtoneManager.TYPE_NOTIFICATION)
-            "normal" -> listOf(RingtoneManager.TYPE_NOTIFICATION, RingtoneManager.TYPE_ALARM)
-            "nuclear" -> listOf(RingtoneManager.TYPE_ALARM, RingtoneManager.TYPE_RINGTONE)
-            else -> listOf(RingtoneManager.TYPE_ALARM, RingtoneManager.TYPE_NOTIFICATION, RingtoneManager.TYPE_RINGTONE)
-        }
-        val type = typeChoices.random()
+        val type = listOf(
+            RingtoneManager.TYPE_ALARM,
+            RingtoneManager.TYPE_NOTIFICATION,
+            RingtoneManager.TYPE_RINGTONE
+        ).random()
 
         val soundUri = RingtoneManager.getDefaultUri(type)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
@@ -250,13 +276,7 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         ringtone?.streamType = AudioManager.STREAM_ALARM
         ringtone?.play()
 
-        val vibePattern = when (profile) {
-            "gentle" -> longArrayOf(0, 250, 150, 250)
-            "normal" -> longArrayOf(0, 350, 120, 450)
-            "nuclear" -> longArrayOf(0, 600, 80, 700, 80, 700)
-            else -> longArrayOf(0, 400, 150, 600)
-        }
-
+        val vibePattern = longArrayOf(0, 400, 150, 600)
         (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.let { v ->
             v.vibrate(VibrationEffect.createWaveform(vibePattern, -1))
         }
@@ -267,7 +287,9 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             override fun run() {
                 if (acknowledged) return
                 playRandomSfx()
-                loadDynamicLineAndSpeak(true)
+                if (!isListening) {
+                    loadDynamicLineAndSpeak(true)
+                }
                 handler.postDelayed(this, 20_000)
             }
         }, 20_000)
@@ -277,6 +299,7 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         handler.removeCallbacksAndMessages(null)
         recognizer?.destroy()
         recognizer = null
+        isListening = false
         ringtone?.stop()
         ringtone = null
         tts?.stop()

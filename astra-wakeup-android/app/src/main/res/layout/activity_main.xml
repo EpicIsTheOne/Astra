@@ -266,19 +266,23 @@
                 android:textSize="13sp" />
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="Wake profile"
-                android:textColor="#CBD5E1"
-                android:textSize="13sp" />
-
-            <Spinner
-                android:id="@+id/spWakeProfile"
+                android:id="@+id/tvWakeTime"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:entries="@array/wake_profiles" />
+                android:layout_marginTop="12dp"
+                android:text="Wake time: 5:50 AM (America/New_York)"
+                android:textColor="#FDE68A"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnPickWakeTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#D946EF"
+                android:text="Change wake time"
+                android:textColor="#FFFFFF" />
 
             <CheckBox
                 android:id="@+id/cbRandomSfx"
@@ -292,14 +296,14 @@
                 android:id="@+id/cbPunish"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Punishment mode"
+                android:text="Keep pushing until I tap I'm awake"
                 android:textColor="#E2E8F0" />
 
             <CheckBox
                 android:id="@+id/cbAstraFm"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Astra FM mode"
+                android:text="Let Astra open with a dramatic intro when available"
                 android:textColor="#E2E8F0" />
 
             <Button

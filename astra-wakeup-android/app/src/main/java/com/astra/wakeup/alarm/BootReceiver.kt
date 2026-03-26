@@ -7,7 +7,7 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            AlarmScheduler.scheduleDaily(context)
+            AlarmScheduler.scheduleFromPrefs(context)
         }
     }
 }

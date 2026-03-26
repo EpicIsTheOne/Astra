@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#0B1020"
     android:orientation="vertical"
     android:padding="16dp">
 
@@ -9,49 +10,122 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Astra Chat"
-        android:textSize="22sp"
+        android:textColor="#F8FAFC"
+        android:textSize="24sp"
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/tvChat"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Less dead fish. More Astra."
+        android:textColor="#C4B5FD"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvCallStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="#1E1B4B"
+        android:paddingLeft="10dp"
+        android:paddingTop="6dp"
+        android:paddingRight="10dp"
+        android:paddingBottom="6dp"
+        android:text="Call: idle"
+        android:textColor="#DDD6FE"
+        android:textSize="13sp" />
+
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:layout_marginTop="12dp"
+        android:background="#111827"
+        android:fillViewport="true"
+        android:padding="14dp">
+
+        <TextView
+            android:id="@+id/tvChat"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#E5E7EB"
+            android:textSize="16sp" />
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/layoutTyping"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:text="Astra: Say something, sleepy goblin."
-        android:textSize="16sp" />
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/progressChatThinking"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:indeterminate="true"
+            android:indeterminateTint="#EC4899" />
+
+        <TextView
+            android:id="@+id/tvTyping"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Astra is thinking…"
+            android:textColor="#F9A8D4"
+            android:textSize="14sp" />
+    </LinearLayout>
 
     <EditText
         android:id="@+id/etChatInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Type a message..." />
+        android:layout_marginTop="12dp"
+        android:background="#1F2937"
+        android:hint="Say something clever. Or at least coherent."
+        android:padding="12dp"
+        android:textColor="#F9FAFB"
+        android:textColorHint="#9CA3AF" />
 
     <CheckBox
         android:id="@+id/cbRemember"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Remember my next message" />
+        android:buttonTint="#A855F7"
+        android:text="Remember my next message"
+        android:textColor="#E5E7EB" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="8dp">
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
 
         <Button
             android:id="@+id/btnChatSend"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Send" />
+            android:backgroundTint="#EC4899"
+            android:text="Send"
+            android:textColor="#FFFFFF" />
+
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="1dp" />
 
         <Button
             android:id="@+id/btnChatTalk"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Talk" />
+            android:backgroundTint="#8B5CF6"
+            android:text="Talk"
+            android:textColor="#FFFFFF" />
     </LinearLayout>
 
     <Button
@@ -59,13 +133,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Start Call" />
-
-    <TextView
-        android:id="@+id/tvCallStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="Call: idle"
-        android:textSize="13sp" />
+        android:backgroundTint="#334155"
+        android:text="Start Call"
+        android:textColor="#FFFFFF" />
 </LinearLayout>

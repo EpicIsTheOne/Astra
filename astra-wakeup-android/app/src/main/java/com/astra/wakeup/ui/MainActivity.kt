@@ -1,17 +1,20 @@
 package com.astra.wakeup.ui
 
+import android.app.TimePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.astra.wakeup.R
 import com.astra.wakeup.alarm.AlarmScheduler
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,9 +32,7 @@ class MainActivity : AppCompatActivity() {
         val layoutGatewayDebug = findViewById<LinearLayout>(R.id.layoutGatewayDebug)
         val layoutWakeCard = findViewById<LinearLayout>(R.id.layoutWakeCard)
         val layoutChatCard = findViewById<LinearLayout>(R.id.layoutChatCard)
-        val spWakeProfile = findViewById<Spinner>(R.id.spWakeProfile)
         val tvVersion = findViewById<TextView>(R.id.tvVersion)
-        val tvConnectHint = findViewById<TextView>(R.id.tvConnectHint)
         val tvApiStatus = findViewById<TextView>(R.id.tvApiStatus)
         val tvApiDetails = findViewById<TextView>(R.id.tvApiDetails)
         val tvConnectBanner = findViewById<TextView>(R.id.tvConnectBanner)
@@ -41,9 +42,11 @@ class MainActivity : AppCompatActivity() {
         val tvLineChip = findViewById<TextView>(R.id.tvLineChip)
         val tvChatChip = findViewById<TextView>(R.id.tvChatChip)
         val tvGatewayDebug = findViewById<TextView>(R.id.tvGatewayDebug)
+        val tvWakeTime = findViewById<TextView>(R.id.tvWakeTime)
         val btnToggleAdvancedGateway = findViewById<Button>(R.id.btnToggleAdvancedGateway)
         val btnConnectGateway = findViewById<Button>(R.id.btnConnectGateway)
         val btnOpenChat = findViewById<Button>(R.id.btnOpenChat)
+        val btnPickWakeTime = findViewById<Button>(R.id.btnPickWakeTime)
         val btnSchedule = findViewById<Button>(R.id.btnSchedule)
         val btnTest = findViewById<Button>(R.id.btnTest)
 
@@ -59,9 +62,20 @@ class MainActivity : AppCompatActivity() {
         cbRandomSfx.isChecked = prefs.getBoolean("random_sfx", true)
         cbPunish.isChecked = prefs.getBoolean("punish", true)
         cbAstraFm.isChecked = prefs.getBoolean("astra_fm", true)
-        val profile = prefs.getString("wake_profile", "bully") ?: "bully"
-        val idx = resources.getStringArray(R.array.wake_profiles).indexOf(profile).coerceAtLeast(0)
-        spWakeProfile.setSelection(idx)
+
+        var wakeHour = prefs.getInt("wake_hour", 5)
+        var wakeMinute = prefs.getInt("wake_minute", 50)
+
+        fun formatWakeTime(hour: Int, minute: Int): String {
+            val time = LocalTime.of(hour, minute)
+            return time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
+        }
+
+        fun updateWakeTimeUi() {
+            val formatted = formatWakeTime(wakeHour, wakeMinute)
+            tvWakeTime.text = "Wake time: $formatted (America/New_York)"
+            btnSchedule.text = "Schedule $formatted wake"
+        }
 
         fun setAdvancedVisible(visible: Boolean) {
             layoutGatewayAdvanced.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
@@ -102,7 +116,6 @@ class MainActivity : AppCompatActivity() {
             val apiUrl = etApiUrl.text.toString().trim()
             val gatewayToken = etGatewayToken.text.toString().trim()
             val bootstrapToken = etBootstrapToken.text.toString().trim()
-            val wakeProfile = spWakeProfile.selectedItem.toString()
             prefs.edit()
                 .putString("api_url", apiUrl)
                 .putString("gateway_token", gatewayToken)
@@ -110,7 +123,9 @@ class MainActivity : AppCompatActivity() {
                 .putBoolean("random_sfx", cbRandomSfx.isChecked)
                 .putBoolean("punish", cbPunish.isChecked)
                 .putBoolean("astra_fm", cbAstraFm.isChecked)
-                .putString("wake_profile", wakeProfile)
+                .putInt("wake_hour", wakeHour)
+                .putInt("wake_minute", wakeMinute)
+                .remove("wake_profile")
                 .apply()
         }
 
@@ -139,21 +154,21 @@ class MainActivity : AppCompatActivity() {
             layoutWakeCard.alpha = wakeAlpha
             layoutChatCard.alpha = chatAlpha
 
-            spWakeProfile.isEnabled = connected
             cbRandomSfx.isEnabled = connected
             cbPunish.isEnabled = connected
             cbAstraFm.isEnabled = connected
+            btnPickWakeTime.isEnabled = connected
             btnSchedule.isEnabled = connected
             btnTest.isEnabled = connected
             btnOpenChat.isEnabled = connected
             btnOpenChat.text = if (connected) "Open Chat" else "Open Chat (connect first)"
             tvWakeHint.text = if (connected) {
-                "Choose how Astra should wake you up on this phone."
+                "Pick any wake time you want. Astra will keep talking with you until you admit you're awake."
             } else {
                 "Connect this phone to enable wake controls."
             }
             tvChatHint.text = if (connected) {
-                "Open your Astra chat from this phone."
+                "Open your Astra chat with a louder personality and voice controls."
             } else {
                 "Connect this phone first, then open your Astra chat."
             }
@@ -322,6 +337,7 @@ class MainActivity : AppCompatActivity() {
             }.start()
         }
 
+        updateWakeTimeUi()
         setAdvancedVisible(false)
         refreshGatewayDebug()
         refreshSecondaryCards()
@@ -333,6 +349,19 @@ class MainActivity : AppCompatActivity() {
 
         btnConnectGateway.setOnClickListener {
             connectThisPhone()
+        }
+
+        btnPickWakeTime.setOnClickListener {
+            if (!isConnectedState()) {
+                Toast.makeText(this, "Connect this phone first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            TimePickerDialog(this, { _, hourOfDay, minute ->
+                wakeHour = hourOfDay
+                wakeMinute = minute
+                saveMainSettings()
+                updateWakeTimeUi()
+            }, wakeHour, wakeMinute, false).show()
         }
 
         findViewById<Button>(R.id.btnSave).setOnClickListener {
@@ -374,8 +403,8 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             saveMainSettings()
-            AlarmScheduler.scheduleDaily(this, 5, 50)
-            Toast.makeText(this, "Scheduled for 5:50 AM ET", Toast.LENGTH_SHORT).show()
+            AlarmScheduler.scheduleDaily(this, wakeHour, wakeMinute)
+            Toast.makeText(this, "Scheduled for ${formatWakeTime(wakeHour, wakeMinute)} ET", Toast.LENGTH_SHORT).show()
         }
 
         btnTest.setOnClickListener {

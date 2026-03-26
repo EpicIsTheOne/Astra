@@ -10,7 +10,7 @@ data class WakeLineResult(val line: String? = null, val mission: String? = null)
 data class WakeFmResult(val script: String? = null)
 
 object WakeMessageClient {
-    fun fetchLineResult(apiUrl: String, punishment: Boolean, wakeProfile: String? = null): WakeLineResult? {
+    fun fetchLineResult(apiUrl: String, punishment: Boolean): WakeLineResult? {
         if (apiUrl.isBlank()) return null
         return runCatching {
             val conn = URL(ApiEndpoints.line(apiUrl)).openConnection() as HttpURLConnection
@@ -23,7 +23,6 @@ object WakeMessageClient {
             val body = JSONObject().apply {
                 put("punishment", punishment)
                 put("user", "Epic")
-                if (!wakeProfile.isNullOrBlank()) put("wakeProfile", wakeProfile)
             }
 
             OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
@@ -36,7 +35,7 @@ object WakeMessageClient {
         }.getOrNull()
     }
 
-    fun fetchFmResult(apiUrl: String, wakeProfile: String? = null): WakeFmResult? {
+    fun fetchFmResult(apiUrl: String): WakeFmResult? {
         if (apiUrl.isBlank()) return null
         return runCatching {
             val conn = URL(ApiEndpoints.normalizeBase(apiUrl) + "/fm").openConnection() as HttpURLConnection
@@ -47,7 +46,6 @@ object WakeMessageClient {
             conn.doOutput = true
             val body = JSONObject().apply {
                 put("user", "Epic")
-                if (!wakeProfile.isNullOrBlank()) put("wakeProfile", wakeProfile)
             }
             OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
             val text = BufferedReader(conn.inputStream.reader()).use { it.readText() }
