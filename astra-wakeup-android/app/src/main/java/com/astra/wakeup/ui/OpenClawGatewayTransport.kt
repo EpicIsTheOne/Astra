@@ -332,10 +332,10 @@ class OpenClawGatewayTransport(
     }
 
     private fun buildDevicePayload(context: Context, config: OpenClawGatewayConfig, nonce: String): JSONObject? {
-        val signatureToken = config.deviceToken
+        val signatureToken = config.gatewayToken
             ?.takeIf { it.isNotBlank() }
-            ?: config.gatewayToken?.takeIf { it.isNotBlank() }
             ?: config.bootstrapToken?.takeIf { it.isNotBlank() }
+            ?: config.deviceToken?.takeIf { it.isNotBlank() }
         val signed = OpenClawGatewayCrypto.signConnectChallenge(
             context = context,
             clientId = ANDROID_GATEWAY_CLIENT_ID,
