@@ -206,7 +206,7 @@ class WakeActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val apiUrl = prefs.getString("api_url", "") ?: ""
 
         Thread {
-            val reply = WakeChatClient.wakeReply(apiUrl, userText)
+            val reply = WakeChatClient.wakeReply(this, apiUrl, userText)
                 ?: "Nice try. You're still waking up now."
 
             runOnUiThread {
