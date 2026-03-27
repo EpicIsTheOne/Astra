@@ -562,29 +562,3 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
-           val repo = InterventionRepository(this)
-            val state = repo.getState()
-            repo.saveState(state.copy(enabled = isChecked))
-            refreshInterventionStatus()
-            if (isChecked) {
-                startService(Intent(this, ContextOrchestratorService::class.java))
-            }
-        }
-
-        btnUsageAccess.setOnClickListener {
-            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        }
-
-        btnInterventionSettings.setOnClickListener {
-            startActivity(Intent(this, ContextActivity::class.java))
-        }
-    }
-}
-       startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        }
-
-        btnInterventionSettings.setOnClickListener {
-            startActivity(Intent(this, ContextActivity::class.java))
-        }
-    }
-}
