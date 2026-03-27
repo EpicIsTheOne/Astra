@@ -1,8 +1,10 @@
 package com.astra.wakeup.ui
 
 import android.app.TimePickerDialog
+import android.app.AppOpsManager
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -27,10 +29,12 @@ class MainActivity : AppCompatActivity() {
         val etBootstrapToken = findViewById<EditText>(R.id.etBootstrapToken)
         val etMediaCenterBaseUrl = findViewById<EditText>(R.id.etMediaCenterBaseUrl)
         val cbPunish = findViewById<CheckBox>(R.id.cbPunish)
+        val cbInterventionsEnabled = findViewById<CheckBox>(R.id.cbInterventionsEnabled)
         val layoutGatewayAdvanced = findViewById<LinearLayout>(R.id.layoutGatewayAdvanced)
         val layoutGatewayDebug = findViewById<LinearLayout>(R.id.layoutGatewayDebug)
         val layoutWakeCard = findViewById<LinearLayout>(R.id.layoutWakeCard)
         val layoutChatCard = findViewById<LinearLayout>(R.id.layoutChatCard)
+        val layoutInterventionCard = findViewById<LinearLayout>(R.id.layoutInterventionCard)
         val tvVersion = findViewById<TextView>(R.id.tvVersion)
         val tvApiStatus = findViewById<TextView>(R.id.tvApiStatus)
         val tvApiDetails = findViewById<TextView>(R.id.tvApiDetails)
@@ -44,12 +48,16 @@ class MainActivity : AppCompatActivity() {
         val tvWakeTime = findViewById<TextView>(R.id.tvWakeTime)
         val tvNodeIdentity = findViewById<TextView>(R.id.tvNodeIdentity)
         val tvWakeMediaStatus = findViewById<TextView>(R.id.tvWakeMediaStatus)
+        val tvWakeAlarmStatus = findViewById<TextView>(R.id.tvWakeAlarmStatus)
+        val tvInterventionStatus = findViewById<TextView>(R.id.tvInterventionStatus)
         val btnToggleAdvancedGateway = findViewById<Button>(R.id.btnToggleAdvancedGateway)
         val btnConnectGateway = findViewById<Button>(R.id.btnConnectGateway)
         val btnOpenChat = findViewById<Button>(R.id.btnOpenChat)
         val btnPickWakeTime = findViewById<Button>(R.id.btnPickWakeTime)
         val btnSchedule = findViewById<Button>(R.id.btnSchedule)
         val btnTest = findViewById<Button>(R.id.btnTest)
+        val btnUsageAccess = findViewById<Button>(R.id.btnUsageAccess)
+        val btnInterventionSettings = findViewById<Button>(R.id.btnInterventionSettings)
 
         val defaultExternalUrl = "http://72.60.29.204:18789"
         val savedApiUrl = prefs.getString("api_url", null)?.takeIf { it.isNotBlank() }
@@ -62,6 +70,7 @@ class MainActivity : AppCompatActivity() {
         tvVersion.text = "version ${pkgInfo.versionName}"
 
         cbPunish.isChecked = prefs.getBoolean("punish", true)
+        cbInterventionsEnabled.isChecked = InterventionRepository(this).getState().enabled
 
         var wakeHour = prefs.getInt("wake_hour", 5)
         var wakeMinute = prefs.getInt("wake_minute", 50)
@@ -75,6 +84,22 @@ class MainActivity : AppCompatActivity() {
             val formatted = formatWakeTime(wakeHour, wakeMinute)
             tvWakeTime.text = "Wake time: $formatted (America/New_York)"
             btnSchedule.text = "Schedule $formatted wake"
+        }
+
+        fun refreshWakeAlarmStatus() {
+            val wakeEnabled = prefs.getBoolean("wake_enabled", false)
+            val canExact = AlarmScheduler.canScheduleExactAlarms(this)
+            val lastFiredAt = prefs.getLong("last_alarm_receiver_fired_at", 0L)
+            tvWakeAlarmStatus.text = buildString {
+                append("Wake alarm: ")
+                append(if (wakeEnabled) "scheduled" else "not scheduled")
+                append(" | exact alarms=")
+                append(if (canExact) "allowed" else "needs permission")
+                if (lastFiredAt > 0L) {
+                    append(" | last trigger=")
+                    append(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastFiredAt)))
+                }
+            }
         }
 
         fun setAdvancedVisible(visible: Boolean) {
@@ -172,14 +197,19 @@ class MainActivity : AppCompatActivity() {
             val connected = isConnectedState()
             val wakeAlpha = if (connected) 1.0f else 0.62f
             val chatAlpha = if (connected) 1.0f else 0.62f
+            val interventionAlpha = if (connected) 1.0f else 0.62f
             layoutWakeCard.alpha = wakeAlpha
             layoutChatCard.alpha = chatAlpha
+            layoutInterventionCard.alpha = interventionAlpha
 
             cbPunish.isEnabled = connected
+            cbInterventionsEnabled.isEnabled = connected
             btnPickWakeTime.isEnabled = connected
             btnSchedule.isEnabled = connected
             btnTest.isEnabled = connected
             btnOpenChat.isEnabled = connected
+            btnUsageAccess.isEnabled = connected
+            btnInterventionSettings.isEnabled = connected
             btnOpenChat.text = if (connected) "Open Chat" else "Open Chat (connect first)"
             tvWakeHint.text = if (connected) {
                 "Pick any wake time you want. Astra will keep trying to wake you up until you tap I'm awake, Talk back only listens when you press it, and wake-ready Media Center assets can be used for audio choices."
@@ -190,6 +220,38 @@ class MainActivity : AppCompatActivity() {
                 "Open your Astra chat with a louder personality and voice controls."
             } else {
                 "Connect this phone first, then open your Astra chat."
+            }
+        }
+
+        fun hasUsageAccess(): Boolean {
+            val appOps = getSystemService(AppOpsManager::class.java)
+            val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                appOps.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(),
+                    packageName
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                appOps.checkOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(),
+                    packageName
+                )
+            }
+            return mode == AppOpsManager.MODE_ALLOWED
+        }
+
+        fun refreshInterventionStatus() {
+            val state = InterventionRepository(this).getState()
+            val tracked = state.trackedApps.filter { it.enabled }
+            tvInterventionStatus.text = buildString {
+                append("Intervention status: ")
+                append(if (state.enabled) "enabled" else "disabled")
+                append(" | usage access=")
+                append(if (hasUsageAccess()) "granted" else "missing")
+                append(" | tracked=")
+                append(if (tracked.isEmpty()) "none" else tracked.joinToString { it.label })
             }
         }
 
@@ -363,7 +425,12 @@ class MainActivity : AppCompatActivity() {
         refreshGatewayDebug()
         refreshSecondaryCards()
         refreshWakeMediaStatus()
+        refreshWakeAlarmStatus()
+        refreshInterventionStatus()
         if (isConnectedState()) OpenClawNodeService.start(this)
+        if (isConnectedState() && InterventionRepository(this).getState().enabled) {
+            startService(Intent(this, ContextOrchestratorService::class.java))
+        }
         runStatusCheck()
 
         btnToggleAdvancedGateway.setOnClickListener {
@@ -390,6 +457,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnSave).setOnClickListener {
             saveMainSettings()
             refreshWakeMediaStatus()
+            refreshWakeAlarmStatus()
+            refreshInterventionStatus()
             refreshGatewayDebug()
             Toast.makeText(this, "Saved settings", Toast.LENGTH_SHORT).show()
         }
@@ -428,8 +497,21 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             saveMainSettings()
-            AlarmScheduler.scheduleDaily(this, wakeHour, wakeMinute)
-            Toast.makeText(this, "Scheduled for ${formatWakeTime(wakeHour, wakeMinute)} ET", Toast.LENGTH_SHORT).show()
+            if (!AlarmScheduler.canScheduleExactAlarms(this)) {
+                prefs.edit().putBoolean("wake_enabled", false).apply()
+                refreshWakeAlarmStatus()
+                Toast.makeText(this, "Allow exact alarms for Astra, then schedule again", Toast.LENGTH_LONG).show()
+                startActivity(AlarmScheduler.exactAlarmSettingsIntent(this))
+                return@setOnClickListener
+            }
+            val scheduled = AlarmScheduler.scheduleDaily(this, wakeHour, wakeMinute)
+            prefs.edit().putBoolean("wake_enabled", scheduled).apply()
+            refreshWakeAlarmStatus()
+            if (scheduled) {
+                Toast.makeText(this, "Scheduled for ${formatWakeTime(wakeHour, wakeMinute)} ET", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Alarm permission missing", Toast.LENGTH_SHORT).show()
+            }
         }
 
         btnTest.setOnClickListener {
@@ -454,6 +536,36 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             startActivity(Intent(this, ChatActivity::class.java))
+        }
+
+        cbInterventionsEnabled.setOnCheckedChangeListener { _, isChecked ->
+            val repo = InterventionRepository(this)
+            val state = repo.getState()
+            repo.saveState(state.copy(enabled = isChecked))
+            refreshInterventionStatus()
+            if (isChecked) {
+                startService(Intent(this, ContextOrchestratorService::class.java))
+            }
+        }
+
+        btnUsageAccess.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+
+        btnInterventionSettings.setOnClickListener {
+            startActivity(Intent(this, ContextActivity::class.java))
+        }
+    }
+}
+is, ContextActivity::class.java))
+        }
+    }
+}
+
+        }
+
+        btnInterventionSettings.setOnClickListener {
+            startActivity(Intent(this, ContextActivity::class.java))
         }
     }
 }

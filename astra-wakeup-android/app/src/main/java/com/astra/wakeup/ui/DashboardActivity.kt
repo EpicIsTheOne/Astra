@@ -59,7 +59,6 @@ class DashboardActivity : AppCompatActivity() {
                 val wakeMinute = astra.getInt("wake_minute", 50)
                 appendLine("- personality: ${astra.getString("personality_mode", "coach")}")
                 appendLine("- wake time: ${String.format(Locale.US, "%02d:%02d", wakeHour, wakeMinute)} ET")
-                appendLine("- astra fm: ${astra.getBoolean("astra_fm", true)}")
                 appendLine()
                 appendLine("Timeline ($level)")
                 appendLine(timeline)

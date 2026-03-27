@@ -3,138 +3,125 @@ package com.astra.wakeup.ui
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.astra.wakeup.R
 import com.astra.wakeup.brain.AstraBrainService
-import java.util.UUID
 
 class ContextActivity : AppCompatActivity() {
+    private lateinit var repo: InterventionRepository
+    private lateinit var cbEnabled: CheckBox
+    private lateinit var cbTts: CheckBox
+    private lateinit var cbVoice: CheckBox
+    private lateinit var etRollingWindow: EditText
+    private lateinit var etCooldown: EditText
+    private lateinit var etTrackedPackage: EditText
+    private lateinit var etTrackedLabel: EditText
+    private lateinit var etTrackedThreshold: EditText
+    private lateinit var tvSummary: TextView
+    private lateinit var tvTrackedApps: TextView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_context)
 
-        val repo = ContextRuleRepository(this)
-        val etId = findViewById<EditText>(R.id.etRuleId)
-        val etName = findViewById<EditText>(R.id.etRuleName)
-        val spTrigger = findViewById<Spinner>(R.id.spRuleTrigger)
-        val etCond = findViewById<EditText>(R.id.etRuleConditions)
-        val etAct = findViewById<EditText>(R.id.etRuleActions)
-        val etZone = findViewById<EditText>(R.id.etCurrentZone)
-        val tvRules = findViewById<TextView>(R.id.tvRules)
-        val prefs = getSharedPreferences("astra", MODE_PRIVATE)
+        repo = InterventionRepository(this)
+        cbEnabled = findViewById(R.id.cbInterventionEnabled)
+        cbTts = findViewById(R.id.cbInterventionTts)
+        cbVoice = findViewById(R.id.cbInterventionVoice)
+        etRollingWindow = findViewById(R.id.etRollingWindowMinutes)
+        etCooldown = findViewById(R.id.etCooldownMinutes)
+        etTrackedPackage = findViewById(R.id.etTrackedPackage)
+        etTrackedLabel = findViewById(R.id.etTrackedLabel)
+        etTrackedThreshold = findViewById(R.id.etTrackedThreshold)
+        tvSummary = findViewById(R.id.tvInterventionSummary)
+        tvTrackedApps = findViewById(R.id.tvTrackedApps)
 
-        etZone.setText(prefs.getString("context_location_zone", "") ?: "")
-
-        fun refresh() {
-            val rules = repo.getRules()
-            tvRules.text = if (rules.isEmpty()) "No rules" else rules.joinToString("\n\n") {
-                "${it.name} [${it.id.take(8)}] ${if (it.enabled) "✅" else "⛔"}\ntrigger=${it.trigger}\nconditions=${it.conditions.joinToString { c -> c.type+"="+c.value }}\nactions=${it.actions.joinToString { a -> a.type+":"+a.p1 }}"
+        fun render() {
+            val state = repo.getState()
+            cbEnabled.isChecked = state.enabled
+            cbTts.isChecked = state.ttsEnabled
+            cbVoice.isChecked = state.voiceEnabled
+            etRollingWindow.setText(state.rollingWindowMinutes.toString())
+            etCooldown.setText(state.cooldownMinutes.toString())
+            tvSummary.text = "Per-app rolling tracking with reusable Astra popups. Defaults target YouTube and TikTok, but you can add more package names here if you want more of your bad habits judged."
+            tvTrackedApps.text = if (state.trackedApps.isEmpty()) {
+                "No tracked apps configured"
+            } else {
+                state.trackedApps.joinToString("\n\n") { app ->
+                    "${app.label} (${app.packageName})\nthreshold=${app.thresholdMinutes} min | ${if (app.enabled) "enabled" else "disabled"}"
+                }
             }
         }
 
-        fun seedTemplate(name: String, trigger: TriggerType, cond: String, act: String) {
-            etId.setText("")
-            etName.setText(name)
-            spTrigger.setSelection(trigger.ordinal)
-            etCond.setText(cond)
-            etAct.setText(act)
-        }
-
-        findViewById<Button>(R.id.btnTplUnlockBrief).setOnClickListener {
-            seedTemplate(
-                "Unlock after alarm briefing",
-                TriggerType.PHONE_UNLOCK,
-                "after_alarm=30",
-                "change_personality:coach|speak:Good morning, here's your day summary"
+        fun saveBaseState() {
+            val current = repo.getState()
+            repo.saveState(
+                current.copy(
+                    enabled = cbEnabled.isChecked,
+                    ttsEnabled = cbTts.isChecked,
+                    voiceEnabled = cbVoice.isChecked,
+                    rollingWindowMinutes = etRollingWindow.text.toString().trim().toIntOrNull()?.coerceAtLeast(5) ?: current.rollingWindowMinutes,
+                    cooldownMinutes = etCooldown.text.toString().trim().toIntOrNull()?.coerceAtLeast(1) ?: current.cooldownMinutes
+                )
             )
         }
 
-        findViewById<Button>(R.id.btnTplSchoolQuiet).setOnClickListener {
-            seedTemplate(
-                "School quiet mode",
-                TriggerType.TIME_TICK,
-                "time_range=08:00-15:00;location_zone=school",
-                "change_personality:silent|show_notification:Quiet mode enabled"
-            )
-        }
-
-        findViewById<Button>(R.id.btnTplHeadphones).setOnClickListener {
-            seedTemplate(
-                "Headphones radio mode",
-                TriggerType.HEADPHONE_CHANGED,
-                "headphones_connected=true",
-                "change_personality:radio|speak:Astra FM connected"
-            )
-        }
-
-        findViewById<Button>(R.id.btnSaveZone).setOnClickListener {
-            prefs.edit().putString("context_location_zone", etZone.text.toString().trim()).apply()
-            Toast.makeText(this, "Zone saved", Toast.LENGTH_SHORT).show()
-        }
-
-        findViewById<Button>(R.id.btnRuleSave).setOnClickListener {
-            val id = etId.text.toString().trim().ifBlank { UUID.randomUUID().toString() }
-            val name = etName.text.toString().trim().ifBlank { "Untitled rule" }
-            val trigger = runCatching { TriggerType.valueOf(spTrigger.selectedItem.toString()) }.getOrDefault(TriggerType.TIME_TICK)
-            val conditions = parseConditions(etCond.text.toString())
-            val actions = parseActions(etAct.text.toString())
-            val existing = repo.getRules().firstOrNull { it.id == id }
-            repo.upsert(ContextRule(id, name, existing?.enabled ?: true, trigger, conditions, actions))
-            Toast.makeText(this, "Rule saved", Toast.LENGTH_SHORT).show()
-            refresh()
-        }
-
-        findViewById<Button>(R.id.btnRuleToggle).setOnClickListener {
-            val id = etId.text.toString().trim()
-            val rule = repo.getRules().firstOrNull { it.id == id }
-            if (rule == null) {
-                Toast.makeText(this, "Enter valid rule ID", Toast.LENGTH_SHORT).show()
+        findViewById<Button>(R.id.btnTrackedSave).setOnClickListener {
+            val packageName = etTrackedPackage.text.toString().trim()
+            val label = etTrackedLabel.text.toString().trim()
+            val threshold = etTrackedThreshold.text.toString().trim().toIntOrNull()?.coerceAtLeast(1)
+            if (packageName.isBlank()) {
+                Toast.makeText(this, "Package name required", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            repo.setEnabled(id, !rule.enabled)
-            refresh()
+            saveBaseState()
+            val current = repo.getState()
+            val updated = current.trackedApps.filterNot { it.packageName == packageName } + InterventionTrackedApp(
+                packageName = packageName,
+                label = label.ifBlank { packageName },
+                enabled = true,
+                thresholdMinutes = threshold ?: 20
+            )
+            repo.saveState(current.copy(trackedApps = updated.sortedBy { it.label.lowercase() }))
+            etTrackedPackage.setText("")
+            etTrackedLabel.setText("")
+            etTrackedThreshold.setText("")
+            render()
+            Toast.makeText(this, "Tracked app saved", Toast.LENGTH_SHORT).show()
         }
 
-        findViewById<Button>(R.id.btnRuleTest).setOnClickListener {
-            val id = etId.text.toString().trim()
-            val engine = ContextRuleEngine(ContextConditionEvaluator(), ContextActionExecutor(this), repo)
-            val snap = ContextSnapshot(
-                locationZoneId = prefs.getString("context_location_zone", null),
-                lastAlarmTriggeredAt = prefs.getLong("last_alarm_triggered_at", 0L).takeIf { it > 0 },
-                lastAlarmDismissedAt = prefs.getLong("last_alarm_dismissed_at", 0L).takeIf { it > 0 }
-            )
-            engine.testRun(id, snap)
-            Toast.makeText(this, "Test run executed", Toast.LENGTH_SHORT).show()
+        findViewById<Button>(R.id.btnTrackedRemove).setOnClickListener {
+            val packageName = etTrackedPackage.text.toString().trim()
+            if (packageName.isBlank()) {
+                Toast.makeText(this, "Enter the package name to remove", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            saveBaseState()
+            val current = repo.getState()
+            repo.saveState(current.copy(trackedApps = current.trackedApps.filterNot { it.packageName == packageName }))
+            etTrackedPackage.setText("")
+            etTrackedLabel.setText("")
+            etTrackedThreshold.setText("")
+            render()
+            Toast.makeText(this, "Tracked app removed", Toast.LENGTH_SHORT).show()
+        }
+
+        findViewById<Button>(R.id.btnInterventionSaveAll).setOnClickListener {
+            saveBaseState()
+            render()
+            Toast.makeText(this, "Intervention settings saved", Toast.LENGTH_SHORT).show()
         }
 
         findViewById<Button>(R.id.btnStartContext).setOnClickListener {
             startService(Intent(this, ContextOrchestratorService::class.java))
             startService(Intent(this, AstraBrainService::class.java))
-            Toast.makeText(this, "Context + Brain services started", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Intervention service started", Toast.LENGTH_SHORT).show()
         }
 
-        refresh()
-    }
-
-    private fun parseConditions(raw: String): List<RuleCondition> {
-        if (raw.isBlank()) return emptyList()
-        return raw.split(";")
-            .mapNotNull { s ->
-                val p = s.split("=", limit = 2)
-                if (p.size != 2) null else RuleCondition(p[0].trim(), p[1].trim())
-            }
-    }
-
-    private fun parseActions(raw: String): List<RuleAction> {
-        if (raw.isBlank()) return emptyList()
-        return raw.split("\\|")
-            .mapNotNull { s ->
-                val p = s.split(":", limit = 2)
-                if (p.size != 2) null else RuleAction(p[0].trim(), p[1].trim())
-            }
+        render()
     }
 }

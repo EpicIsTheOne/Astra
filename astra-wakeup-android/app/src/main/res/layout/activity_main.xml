@@ -306,6 +306,15 @@
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/tvWakeAlarmStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Wake alarm: -"
+                android:textColor="#C4B5FD"
+                android:textSize="12sp" />
+
             <Button
                 android:id="@+id/btnPickWakeTime"
                 android:layout_width="match_parent"
@@ -375,6 +384,59 @@
                 android:layout_marginTop="12dp"
                 android:backgroundTint="#334155"
                 android:text="Open Chat"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layoutInterventionCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="#162033"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Interventions"
+                android:textColor="#F8FAFC"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvInterventionStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Intervention status: -"
+                android:textColor="#CBD5E1"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/cbInterventionsEnabled"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Enable Astra app interventions"
+                android:textColor="#E2E8F0" />
+
+            <Button
+                android:id="@+id/btnUsageAccess"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:backgroundTint="#8B5CF6"
+                android:text="Open usage access settings"
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnInterventionSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#475569"
+                android:text="Open intervention settings"
                 android:textColor="#FFFFFF" />
         </LinearLayout>
 

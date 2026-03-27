@@ -41,11 +41,11 @@ object ApiStatusClient {
         if (apiUrl.isBlank()) return ApiSuiteStatus(false, "offline ❌", "No API URL", false, false, false)
 
         val (hOk, hMsg) = get(ApiEndpoints.health(apiUrl))
-        val lineOk = WakeMessageClient.fetchLine(apiUrl, punishment = false) != null
         val chat = WakeChatClient.chatReplyDetailed(context, apiUrl, "ping")
         val chatOk = !chat.reply.isNullOrBlank()
+        val lineOk = chatOk
 
-        val allOk = hOk && lineOk && chatOk
+        val allOk = hOk && chatOk
         val chatDetail = if (chatOk) {
             "ok"
         } else {

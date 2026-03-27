@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.inputmethod.InputMethodManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -76,6 +77,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         findViewById<Button>(R.id.btnChatSend).setOnClickListener {
             val msg = etInput.text.toString().trim()
             if (msg.isNotBlank()) {
+                hideKeyboard()
                 appendMessage("You", msg, isAstra = false)
                 etInput.setText("")
                 askAstra(msg, fromCall = false, remember = cbRemember.isChecked)
@@ -145,6 +147,12 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         line.append(bodySpan)
         tvChat.append(line)
         chatScroll.post { chatScroll.fullScroll(android.view.View.FOCUS_DOWN) }
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(InputMethodManager::class.java)
+        imm?.hideSoftInputFromWindow(etInput.windowToken, 0)
+        etInput.clearFocus()
     }
 
     private fun setCallStatus(state: String) {

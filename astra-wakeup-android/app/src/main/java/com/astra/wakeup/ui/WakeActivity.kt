@@ -20,6 +20,7 @@ import com.astra.wakeup.alarm.AlarmScheduler
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.UUID
 
 class WakeActivity : AppCompatActivity() {
     private var recognizer: SpeechRecognizer? = null
@@ -29,6 +30,10 @@ class WakeActivity : AppCompatActivity() {
     private var wakeTurn = 0
     private var outputsStopped = false
     private var wakeMediaCatalog = "Loading wake-ready Media Center assets..."
+    private var wakeMusicAssets: List<MediaCenterAsset> = emptyList()
+    private var wakeSfxAssets: List<MediaCenterAsset> = emptyList()
+    private var currentMusicAsset: MediaCenterAsset? = null
+    private val wakeSessionKey = "wake-${UUID.randomUUID()}"
     private lateinit var phoneControl: PhoneControlExecutor
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,7 +71,8 @@ class WakeActivity : AppCompatActivity() {
             acknowledged = true
             getSharedPreferences("astra", MODE_PRIVATE).edit().putLong("last_alarm_dismissed_at", System.currentTimeMillis()).apply()
             stopWakeOutputs()
-            AlarmScheduler.scheduleSnooze(this, 10)
+            val snoozed = AlarmScheduler.scheduleSnooze(this, 10)
+            getSharedPreferences("astra", MODE_PRIVATE).edit().putBoolean("wake_enabled", snoozed).apply()
             finish()
         }
     }
@@ -74,10 +80,25 @@ class WakeActivity : AppCompatActivity() {
     private fun preloadWakeMediaCatalog() {
         Thread {
             val result = runCatching { MediaCenterClient.fetchWakeAssets(this) }
-            wakeMediaCatalog = result.getOrNull()?.let { assets ->
-                MediaCenterClient.assetCatalogText(assets, limit = 12)
+            val assets = result.getOrNull()
+            if (assets != null) {
+                wakeMusicAssets = assets.filter { it.collection == "wake-music" }
+                wakeSfxAssets = assets.filter { it.collection == "wake-sfx" }
+                currentMusicAsset = wakeMusicAssets.randomOrNull()
+            }
+            wakeMediaCatalog = assets?.let { loaded ->
+                MediaCenterClient.assetCatalogText(loaded, limit = 12)
             } ?: "Media Center assets could not be loaded right now."
         }.start()
+    }
+
+    private fun currentMusicSummary(): String {
+        val current = currentMusicAsset
+        return if (current == null) {
+            "No wake-music asset is currently available."
+        } else {
+            "Current wake song: title=${JSONObject.quote(current.title)} url=${current.publicUrl}"
+        }
     }
 
     private fun requestWakeTurn(reason: String) {
@@ -93,10 +114,16 @@ class WakeActivity : AppCompatActivity() {
             append("The speech must be Astra talking directly to Epic in 1-3 short sentences. ")
             append("No markdown. No prose outside JSON. No code fences. ")
             append("Allowed commands are phone.tts.speak, phone.audio.play, phone.audio.stop, phone.vibrate. ")
+            append("Music is mandatory at the start of each wake session if any wake-music assets exist. ")
+            append("Prefer speech first, mandatory music at the start, and sound effects as occasional accents. Use phone.vibrate rarely and only if you genuinely need emphasis, not by default. ")
             append("If you use phone.audio.play, sourceType must be url and source must be one of the wake-ready Media Center URLs listed below. ")
+            append("On the initial turn, if a current wake song is provided, include a phone.audio.play action for that song unless music is already impossible. ")
+            append("On later turns, you may keep the current song, switch to another listed wake-music URL, or stop/change music if it helps. ")
+            append("Promote sound effects sometimes, but do not overdo them or stack noise constantly. ")
             append("Use actions only when you actually want the phone to do something. ")
             append("The app itself will execute the actions. ")
-            append("Wake-ready media catalog:\n")
+            append(currentMusicSummary())
+            append("\nWake-ready media catalog:\n")
             append(wakeMediaCatalog)
             append("\n")
             append("Epic is not awake yet. Reason for this turn: $reason. Wake turn number: $wakeTurn. ")
@@ -104,11 +131,13 @@ class WakeActivity : AppCompatActivity() {
             append(NodeIdentity.getStableNodeId(this@WakeActivity))
             append(", instanceId=")
             append(NodeIdentity.getNodeInstanceId(this@WakeActivity))
-            append(".")
+            append(", wakeSessionKey=")
+            append(wakeSessionKey)
+            append(". This wake session is fresh for this alarm and should not rely on old session context.")
         }
 
         Thread {
-            val raw = WakeChatClient.chatReply(this, getApiUrl(), prompt)
+            val raw = WakeChatClient.chatReply(this, getApiUrl(), prompt, wakeSessionKey)
             val plan = WakePlanParser.parse(raw)
             runOnUiThread {
                 renderPlan(plan)
@@ -119,6 +148,17 @@ class WakeActivity : AppCompatActivity() {
     private fun renderPlan(plan: WakePlan) {
         val lineView = findViewById<TextView>(R.id.tvLine)
         lineView.text = plan.speech
+
+        for (i in 0 until plan.actions.length()) {
+            val action = plan.actions.optJSONObject(i) ?: continue
+            if (action.optString("command") == "phone.audio.play") {
+                val params = action.optJSONObject("params")
+                val source = params?.optString("source").orEmpty()
+                if (source.isNotBlank()) {
+                    currentMusicAsset = wakeMusicAssets.firstOrNull { it.publicUrl == source } ?: currentMusicAsset
+                }
+            }
+        }
 
         val actions = JSONArray()
         if (plan.speech.isNotBlank()) {
@@ -209,13 +249,17 @@ class WakeActivity : AppCompatActivity() {
             append(". Return ONLY valid compact JSON with this exact shape: ")
             append("{\"speech\":string,\"actions\":[{\"command\":string,\"params\":object}]}. ")
             append("Allowed commands are phone.tts.speak, phone.audio.play, phone.audio.stop, phone.vibrate. ")
-            append("If you use phone.audio.play, sourceType must be url and source must be one of these wake-ready Media Center URLs:\n")
+            append("Keep music going during the wake flow unless there is a good reason to stop or switch it. ")
+            append("You may change the song mid-wake if it helps, using another listed wake-music URL. ")
+            append("Promote sound effects sometimes, but do not overdo them. Use phone.vibrate rarely and only if truly needed. ")
+            append(currentMusicSummary())
+            append("\nIf you use phone.audio.play, sourceType must be url and source must be one of these wake-ready Media Center URLs:\n")
             append(wakeMediaCatalog)
             append("\nKeep it short, direct, and in-character. No markdown.")
         }
 
         Thread {
-            val raw = WakeChatClient.wakeReply(this, getApiUrl(), prompt)
+            val raw = WakeChatClient.wakeReply(this, getApiUrl(), prompt, wakeSessionKey)
             val plan = WakePlanParser.parse(raw)
             runOnUiThread {
                 renderPlan(plan)

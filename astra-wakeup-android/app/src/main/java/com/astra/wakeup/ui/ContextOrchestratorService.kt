@@ -10,15 +10,26 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.CalendarContract
 import androidx.core.app.NotificationCompat
 import com.astra.wakeup.R
+import java.util.UUID
 
 class ContextOrchestratorService : Service() {
     private lateinit var repo: ContextRuleRepository
     private lateinit var engine: ContextRuleEngine
+    private lateinit var interventionRepo: InterventionRepository
     private var headphonesConnected: Boolean = false
+    private val handler = Handler(Looper.getMainLooper())
+    private val appUsageTick = object : Runnable {
+        override fun run() {
+            checkAppUsageIntervention()
+            handler.postDelayed(this, 15_000)
+        }
+    }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -45,6 +56,7 @@ class ContextOrchestratorService : Service() {
     override fun onCreate() {
         super.onCreate()
         repo = ContextRuleRepository(this)
+        interventionRepo = InterventionRepository(this)
         engine = ContextRuleEngine(ContextConditionEvaluator(), ContextActionExecutor(this), repo)
         ensureChannel()
         val n: Notification = NotificationCompat.Builder(this, "astra_context_engine")
@@ -64,10 +76,12 @@ class ContextOrchestratorService : Service() {
             addAction(Intent.ACTION_TIME_TICK)
         }
         registerReceiver(receiver, f)
+        handler.post(appUsageTick)
     }
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(receiver) }
+        handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
@@ -92,7 +106,35 @@ class ContextOrchestratorService : Service() {
             lastAlarmDismissedAt = lastDismiss,
             locationZoneId = zone,
             nextCalendarEventMs = nextEvent,
-            currentPersonality = mode
+            currentPersonality = mode,
+            foregroundAppPackage = AppUsageTracker.foregroundApp(this)
+        )
+    }
+
+    private fun checkAppUsageIntervention() {
+        val state = interventionRepo.getState()
+        if (!state.enabled) return
+        if (!AppUsageTracker.hasUsageAccess(this)) return
+
+        val currentPackage = AppUsageTracker.foregroundApp(this) ?: return
+        val tracked = state.trackedApps.firstOrNull { it.enabled && it.packageName == currentPackage } ?: return
+        val usage = AppUsageTracker.usageInWindow(this, tracked.packageName, state.rollingWindowMinutes)
+        val thresholdMs = tracked.thresholdMinutes * 60_000L
+        if (usage.totalMs < thresholdMs) return
+
+        val cooldownMs = state.cooldownMinutes * 60_000L
+        val lastPopup = interventionRepo.getLastPopupAt(tracked.packageName)
+        if (lastPopup > 0 && System.currentTimeMillis() - lastPopup < cooldownMs) return
+
+        interventionRepo.saveLastPopupAt(tracked.packageName, System.currentTimeMillis())
+        val minutes = usage.totalMs / 60_000L
+        val opener = "You've spent $minutes minutes in ${tracked.label} lately. Get off and tell me what you're doing."
+        InterventionPopupActivity.open(
+            context = this,
+            packageName = tracked.packageName,
+            label = tracked.label,
+            message = opener,
+            sessionKey = "intervention-${tracked.packageName}-${UUID.randomUUID()}"
         )
     }
 

@@ -1,118 +1,176 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Astra Context Engine"
-        android:textSize="22sp"
-        android:textStyle="bold" />
-
-    <EditText
-        android:id="@+id/etRuleId"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Rule ID (blank = create)" />
-
-    <EditText
-        android:id="@+id/etRuleName"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Rule name" />
-
-    <Spinner
-        android:id="@+id/spRuleTrigger"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:entries="@array/context_triggers" />
-
-    <EditText
-        android:id="@+id/etRuleConditions"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="conditions e.g. after_alarm=30;time_range=06:00-08:00" />
-
-    <EditText
-        android:id="@+id/etRuleActions"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="actions e.g. speak:Wake up|change_personality:coach" />
-
-    <EditText
-        android:id="@+id/etCurrentZone"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Current location zone (e.g. school,home)" />
-
-    <Button
-        android:id="@+id/btnSaveZone"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Save Location Zone" />
+    android:fillViewport="true"
+    android:background="#0F172A">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
-        <Button
-            android:id="@+id/btnRuleSave"
-            android:layout_width="0dp"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Save" />
-        <Button
-            android:id="@+id/btnRuleToggle"
-            android:layout_width="0dp"
+            android:text="Astra Interventions"
+            android:textColor="#F8FAFC"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvInterventionSummary"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Enable/Disable" />
-        <Button
-            android:id="@+id/btnRuleTest"
-            android:layout_width="0dp"
+            android:layout_marginTop="8dp"
+            android:text="Loading intervention settings..."
+            android:textColor="#CBD5E1"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/cbInterventionEnabled"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Test" />
+            android:layout_marginTop="12dp"
+            android:text="Enable Astra intervention overlay"
+            android:textColor="#E2E8F0" />
+
+        <CheckBox
+            android:id="@+id/cbInterventionTts"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Speak interventions with TTS"
+            android:textColor="#E2E8F0" />
+
+        <CheckBox
+            android:id="@+id/cbInterventionVoice"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Allow voice replies in popup"
+            android:textColor="#E2E8F0" />
+
+        <EditText
+            android:id="@+id/etRollingWindowMinutes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#162033"
+            android:hint="Rolling window minutes"
+            android:inputType="number"
+            android:padding="12dp"
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B" />
+
+        <EditText
+            android:id="@+id/etCooldownMinutes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="#162033"
+            android:hint="Cooldown minutes"
+            android:inputType="number"
+            android:padding="12dp"
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Tracked apps"
+            android:textColor="#F8FAFC"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvTrackedApps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="No tracked apps"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/etTrackedPackage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#162033"
+            android:hint="Package name (e.g. com.google.android.youtube)"
+            android:padding="12dp"
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B" />
+
+        <EditText
+            android:id="@+id/etTrackedLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="#162033"
+            android:hint="Label (e.g. YouTube)"
+            android:padding="12dp"
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B" />
+
+        <EditText
+            android:id="@+id/etTrackedThreshold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="#162033"
+            android:hint="Threshold minutes"
+            android:inputType="number"
+            android:padding="12dp"
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnTrackedSave"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:backgroundTint="#EC4899"
+                android:text="Add / update app"
+                android:textColor="#FFFFFF" />
+
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/btnTrackedRemove"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:backgroundTint="#7F1D1D"
+                android:text="Remove app"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnInterventionSaveAll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:backgroundTint="#8B5CF6"
+            android:text="Save intervention settings"
+            android:textColor="#FFFFFF" />
+
+        <Button
+            android:id="@+id/btnStartContext"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="#475569"
+            android:text="Start intervention service"
+            android:textColor="#FFFFFF" />
     </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
-        <Button
-            android:id="@+id/btnTplUnlockBrief"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Template: Unlock Brief" />
-        <Button
-            android:id="@+id/btnTplSchoolQuiet"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Template: School Quiet" />
-        <Button
-            android:id="@+id/btnTplHeadphones"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Template: Headphones Radio" />
-    </LinearLayout>
-
-    <Button
-        android:id="@+id/btnStartContext"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Start Context Service" />
-
-    <TextView
-        android:id="@+id/tvRules"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:text="Loading rules..."
-        android:textSize="13sp" />
-</LinearLayout>
+</ScrollView>

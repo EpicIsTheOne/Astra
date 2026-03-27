@@ -47,5 +47,6 @@ data class ContextSnapshot(
     val lastAlarmDismissedAt: Long? = null,
     val locationZoneId: String? = null,
     val nextCalendarEventMs: Long? = null,
-    val currentPersonality: PersonalityMode = PersonalityMode.COACH
+    val currentPersonality: PersonalityMode = PersonalityMode.COACH,
+    val foregroundAppPackage: String? = null
 )
