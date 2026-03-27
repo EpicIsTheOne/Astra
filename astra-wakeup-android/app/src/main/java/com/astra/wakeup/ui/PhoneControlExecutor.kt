@@ -2,7 +2,10 @@ package com.astra.wakeup.ui
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
+import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -17,6 +20,9 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
     private var pendingSpeak: String? = null
     private var musicPlayer: MediaPlayer? = null
     private var sfxPlayer: MediaPlayer? = null
+    private val audioManager = context.getSystemService(AudioManager::class.java)
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasAudioFocus = false
 
     init {
         tts = TextToSpeech(context.applicationContext, this)
@@ -92,6 +98,7 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
     }
 
     private fun speak(text: String) {
+        requestAlarmAudioFocus()
         if (!ttsReady) {
             pendingSpeak = text
             return
@@ -107,6 +114,7 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
     }
 
     private fun playAudio(channel: String, sourceType: String, source: String, loop: Boolean, volume: Float) {
+        requestAlarmAudioFocus()
         val player = MediaPlayer()
         player.setAudioAttributes(
             AudioAttributes.Builder()
@@ -152,6 +160,9 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
                 sfxPlayer = null
             }
         }
+        if (musicPlayer == null && sfxPlayer == null) {
+            abandonAlarmAudioFocus()
+        }
     }
 
     private fun stopPlayer(player: MediaPlayer?) {
@@ -167,10 +178,49 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
         vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
     }
 
+    private fun requestAlarmAudioFocus() {
+        if (hasAudioFocus) return
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAcceptsDelayedFocusGain(false)
+                .setWillPauseWhenDucked(true)
+                .build()
+            audioFocusRequest = request
+            audioManager.requestAudioFocus(request)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                null,
+                AudioManager.STREAM_ALARM,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            )
+        }
+        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    private fun abandonAlarmAudioFocus() {
+        if (!hasAudioFocus) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+            audioFocusRequest = null
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(null)
+        }
+        hasAudioFocus = false
+    }
+
     fun release() {
         stopPlayback()
         tts?.stop()
         tts?.shutdown()
         tts = null
+        abandonAlarmAudioFocus()
     }
 }
