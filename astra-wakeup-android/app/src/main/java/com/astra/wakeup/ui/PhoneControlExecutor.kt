@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -22,6 +23,7 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
     private var pendingSpeak: PendingSpeech? = null
     private var musicPlayer: MediaPlayer? = null
     private var sfxPlayer: MediaPlayer? = null
+    private var speechFinishedListener: (() -> Unit)? = null
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -62,6 +64,17 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+
+                override fun onDone(utteranceId: String?) {
+                    speechFinishedListener?.invoke()
+                }
+
+                override fun onError(utteranceId: String?) {
+                    speechFinishedListener?.invoke()
+                }
+            })
             pendingSpeak?.let {
                 pendingSpeak = null
                 speakNow(it.text, it.volume)
@@ -251,8 +264,13 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
         hasAudioFocus = false
     }
 
+    fun setSpeechFinishedListener(listener: (() -> Unit)?) {
+        speechFinishedListener = listener
+    }
+
     fun release() {
         stopPlayback()
+        speechFinishedListener = null
         tts?.stop()
         tts?.shutdown()
         tts = null

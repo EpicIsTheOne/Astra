@@ -16,6 +16,7 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.view.Gravity
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
@@ -34,12 +35,15 @@ class AstraOverlayActivity : AppCompatActivity() {
     private var recognizer: SpeechRecognizer? = null
     private var isListening = false
     private var waitingForReply = false
+    private var autoRelistenEnabled = true
+    private var shouldResumeAfterSpeech = false
     private val handler = Handler(Looper.getMainLooper())
     private val openClawChatClient = OpenClawChatClient()
     private lateinit var phoneControl: PhoneControlExecutor
     private lateinit var tvTranscript: TextView
     private lateinit var tvStatus: TextView
     private lateinit var tvConversation: TextView
+    private lateinit var panelCard: View
     private lateinit var etInput: EditText
     private lateinit var scrollConversation: ScrollView
     private lateinit var btnSend: Button
@@ -53,6 +57,16 @@ class AstraOverlayActivity : AppCompatActivity() {
         window.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
 
         phoneControl = PhoneControlExecutor(this)
+        phoneControl.setSpeechFinishedListener {
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed && shouldResumeAfterSpeech && autoRelistenEnabled) {
+                    shouldResumeAfterSpeech = false
+                    setListeningUi(status = "Listening again…", listening = false)
+                    handler.postDelayed({ startSpeechInput(force = true) }, 500)
+                }
+            }
+        }
+        panelCard = findViewById(R.id.overlayPanelCard)
         tvTranscript = findViewById(R.id.tvOverlayTranscript)
         tvStatus = findViewById(R.id.tvOverlayStatus)
         tvConversation = findViewById(R.id.tvOverlayConversation)
@@ -62,10 +76,17 @@ class AstraOverlayActivity : AppCompatActivity() {
         btnRetryListen = findViewById(R.id.btnOverlayListen)
         btnClose = findViewById(R.id.btnOverlayClose)
 
+        panelCard.translationY = 60f
+        panelCard.alpha = 0f
+        panelCard.animate().translationY(0f).alpha(1f).setDuration(220).start()
+
         appendMessage("Astra", "Panel ready. Summon me with a tap, not fake background hotword nonsense.", true)
 
         btnClose.setOnClickListener { finish() }
-        btnRetryListen.setOnClickListener { startSpeechInput(force = true) }
+        btnRetryListen.setOnClickListener {
+            shouldResumeAfterSpeech = false
+            startSpeechInput(force = true)
+        }
         btnSend.setOnClickListener { submitTypedInput() }
         etInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
@@ -85,6 +106,9 @@ class AstraOverlayActivity : AppCompatActivity() {
     private fun submitTypedInput() {
         val text = etInput.text.toString().trim()
         if (text.isBlank()) return
+        recognizer?.cancel()
+        isListening = false
+        shouldResumeAfterSpeech = false
         hideKeyboard()
         etInput.setText("")
         processUserInput(text, source = "typed")
@@ -128,8 +152,9 @@ class AstraOverlayActivity : AppCompatActivity() {
             runOnUiThread {
                 waitingForReply = false
                 appendMessage("Astra", reply, true)
+                shouldResumeAfterSpeech = autoRelistenEnabled
                 speak(reply)
-                setListeningUi(status = "Tap Listen to talk again, or just type.", listening = false)
+                setListeningUi(status = if (autoRelistenEnabled) "Astra is speaking… then I’ll listen again." else "Tap Listen to talk again, or just type.", listening = false)
             }
         }.start()
     }
@@ -145,6 +170,8 @@ class AstraOverlayActivity : AppCompatActivity() {
 
     private fun startSpeechInput(force: Boolean = false) {
         if (waitingForReply || (isListening && !force)) return
+
+        shouldResumeAfterSpeech = false
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
@@ -252,6 +279,7 @@ class AstraOverlayActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        shouldResumeAfterSpeech = false
         recognizer?.cancel()
         isListening = false
         super.onStop()
