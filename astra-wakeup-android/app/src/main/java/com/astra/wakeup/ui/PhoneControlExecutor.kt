@@ -21,6 +21,22 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
     private var musicPlayer: MediaPlayer? = null
     private var sfxPlayer: MediaPlayer? = null
     private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                stopPlayback()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                musicPlayer?.setVolume(0.08f, 0.08f)
+                sfxPlayer?.setVolume(0.2f, 0.2f)
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                musicPlayer?.setVolume(0.22f, 0.22f)
+                sfxPlayer?.setVolume(1.0f, 1.0f)
+            }
+        }
+    }
     private var audioFocusRequest: AudioFocusRequest? = null
     private var hasAudioFocus = false
 
@@ -181,7 +197,8 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
     private fun requestAlarmAudioFocus() {
         if (hasAudioFocus) return
         val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
                 .setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)
@@ -189,14 +206,13 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
                         .build()
                 )
                 .setAcceptsDelayedFocusGain(false)
-                .setWillPauseWhenDucked(true)
                 .build()
             audioFocusRequest = request
             audioManager.requestAudioFocus(request)
         } else {
             @Suppress("DEPRECATION")
             audioManager.requestAudioFocus(
-                null,
+                audioFocusChangeListener,
                 AudioManager.STREAM_ALARM,
                 AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
             )
