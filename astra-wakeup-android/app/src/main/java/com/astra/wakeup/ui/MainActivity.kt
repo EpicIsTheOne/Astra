@@ -689,16 +689,3 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
-  startActivity(Intent(this, ContextActivity::class.java))
-        }
-    }
-}
-etOnClickListener {
-            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        }
-
-        btnInterventionSettings.setOnClickListener {
-            startActivity(Intent(this, ContextActivity::class.java))
-        }
-    }
-}
