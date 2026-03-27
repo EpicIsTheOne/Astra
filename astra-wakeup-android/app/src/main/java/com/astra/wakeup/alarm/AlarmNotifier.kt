@@ -6,16 +6,14 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
 import android.os.Build
-import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.astra.wakeup.R
 import com.astra.wakeup.ui.WakeActivity
 
 object AlarmNotifier {
-    private const val CHANNEL_ID = "astra_wake_alarm"
+    private const val CHANNEL_ID = "astra_wake_alarm_v2"
     private const val NOTIFICATION_ID = 5501
 
     fun showWakeAlarm(context: Context) {
@@ -67,13 +65,7 @@ object AlarmNotifier {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setBypassDnd(true)
                 enableVibration(true)
-                setSound(
-                    Settings.System.DEFAULT_ALARM_ALERT_URI,
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
+                setSound(null, null)
             }
             nm.createNotificationChannel(channel)
         }

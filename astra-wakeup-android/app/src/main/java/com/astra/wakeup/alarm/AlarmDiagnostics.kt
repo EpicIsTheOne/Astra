@@ -16,7 +16,7 @@ object AlarmDiagnostics {
     fun wakeChannelImportance(context: Context): Int? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
         val nm = context.getSystemService(NotificationManager::class.java)
-        return nm.getNotificationChannel("astra_wake_alarm")?.importance
+        return nm.getNotificationChannel("astra_wake_alarm_v2")?.importance
     }
 
     fun wakeSessionChannelImportance(context: Context): Int? {
