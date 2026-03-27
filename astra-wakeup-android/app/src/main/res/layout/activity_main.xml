@@ -349,6 +349,24 @@
                 android:backgroundTint="#475569"
                 android:text="Test wake screen"
                 android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnTestFullScreenAlarm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#EC4899"
+                android:text="Test full-screen alarm"
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnNotificationSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#334155"
+                android:text="Open notification settings"
+                android:textColor="#FFFFFF" />
         </LinearLayout>
 
         <LinearLayout

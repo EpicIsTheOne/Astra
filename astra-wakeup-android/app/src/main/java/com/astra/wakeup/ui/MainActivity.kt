@@ -13,7 +13,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.astra.wakeup.R
+import com.astra.wakeup.alarm.AlarmDiagnostics
+import com.astra.wakeup.alarm.AlarmNotifier
 import com.astra.wakeup.alarm.AlarmScheduler
+import com.astra.wakeup.alarm.WakeForegroundService
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -431,6 +434,8 @@ class MainActivity : AppCompatActivity() {
         if (isConnectedState() && InterventionRepository(this).getState().enabled) {
             startService(Intent(this, ContextOrchestratorService::class.java))
         }
+        AlarmNotifier.showWakeAlarm(this)
+        AlarmNotifier.clearWakeAlarm(this)
         runStatusCheck()
 
         btnToggleAdvancedGateway.setOnClickListener {
@@ -550,6 +555,32 @@ class MainActivity : AppCompatActivity() {
 
         btnUsageAccess.setOnClickListener {
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+
+        btnInterventionSettings.setOnClickListener {
+            startActivity(Intent(this, ContextActivity::class.java))
+        }
+    }
+}
+           val repo = InterventionRepository(this)
+            val state = repo.getState()
+            repo.saveState(state.copy(enabled = isChecked))
+            refreshInterventionStatus()
+            if (isChecked) {
+                startService(Intent(this, ContextOrchestratorService::class.java))
+            }
+        }
+
+        btnUsageAccess.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+
+        btnInterventionSettings.setOnClickListener {
+            startActivity(Intent(this, ContextActivity::class.java))
+        }
+    }
+}
+       startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
         }
 
         btnInterventionSettings.setOnClickListener {
