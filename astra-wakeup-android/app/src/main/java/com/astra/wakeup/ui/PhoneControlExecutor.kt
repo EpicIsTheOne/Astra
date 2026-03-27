@@ -3,6 +3,7 @@ package com.astra.wakeup.ui
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
@@ -14,7 +15,8 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var pendingSpeak: String? = null
-    private var mediaPlayer: MediaPlayer? = null
+    private var musicPlayer: MediaPlayer? = null
+    private var sfxPlayer: MediaPlayer? = null
 
     init {
         tts = TextToSpeech(context.applicationContext, this)
@@ -26,9 +28,15 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
             tts?.language = Locale.US
             tts?.setPitch(1.08f)
             tts?.setSpeechRate(1.0f)
+            tts?.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
             pendingSpeak?.let {
                 pendingSpeak = null
-                tts?.speak(it, TextToSpeech.QUEUE_FLUSH, null, "phone-control")
+                speakNow(it)
             }
         }
     }
@@ -46,12 +54,14 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
                 val source = params?.optString("source").orEmpty()
                 val loop = params?.optBoolean("loop", false) ?: false
                 val volume = (params?.optDouble("volume", 1.0) ?: 1.0).toFloat()
-                playAudio(sourceType, source, loop, volume)
-                JSONObject().put("playing", true).put("sourceType", sourceType)
+                val channel = params?.optString("channel").orEmpty().ifBlank { if (loop) "music" else "sfx" }
+                playAudio(channel, sourceType, source, loop, volume)
+                JSONObject().put("playing", true).put("sourceType", sourceType).put("channel", channel)
             }
             "phone.audio.stop" -> {
-                stopPlayback()
-                JSONObject().put("stopped", true)
+                val channel = params?.optString("channel").orEmpty()
+                stopPlayback(channel)
+                JSONObject().put("stopped", true).put("channel", channel.ifBlank { "all" })
             }
             "phone.vibrate" -> {
                 val arr = params?.optJSONArray("patternMs")
@@ -86,11 +96,17 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
             pendingSpeak = text
             return
         }
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "phone-control")
+        speakNow(text)
     }
 
-    private fun playAudio(sourceType: String, source: String, loop: Boolean, volume: Float) {
-        stopPlayback()
+    private fun speakNow(text: String) {
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+        }
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "phone-control")
+    }
+
+    private fun playAudio(channel: String, sourceType: String, source: String, loop: Boolean, volume: Float) {
         val player = MediaPlayer()
         player.setAudioAttributes(
             AudioAttributes.Builder()
@@ -106,16 +122,44 @@ class PhoneControlExecutor(private val context: Context) : TextToSpeech.OnInitLi
         player.setVolume(volume, volume)
         player.setOnPreparedListener { it.start() }
         player.prepareAsync()
-        mediaPlayer = player
+
+        when (channel) {
+            "music" -> {
+                stopPlayer(musicPlayer)
+                musicPlayer = player
+            }
+            else -> {
+                stopPlayer(sfxPlayer)
+                sfxPlayer = player
+            }
+        }
     }
 
-    private fun stopPlayback() {
-        mediaPlayer?.runCatching {
+    private fun stopPlayback(channel: String = "") {
+        when (channel) {
+            "music" -> {
+                stopPlayer(musicPlayer)
+                musicPlayer = null
+            }
+            "sfx" -> {
+                stopPlayer(sfxPlayer)
+                sfxPlayer = null
+            }
+            else -> {
+                stopPlayer(musicPlayer)
+                stopPlayer(sfxPlayer)
+                musicPlayer = null
+                sfxPlayer = null
+            }
+        }
+    }
+
+    private fun stopPlayer(player: MediaPlayer?) {
+        player?.runCatching {
             if (isPlaying) stop()
             reset()
             release()
         }
-        mediaPlayer = null
     }
 
     private fun vibrate(pattern: LongArray) {

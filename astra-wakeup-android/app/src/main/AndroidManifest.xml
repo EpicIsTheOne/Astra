@@ -100,6 +100,11 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <service
+            android:name=".alarm.WakeForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <receiver
             android:name=".alarm.BootReceiver"
             android:enabled="true"

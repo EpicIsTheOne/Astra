@@ -84,6 +84,7 @@ class WakeActivity : AppCompatActivity() {
             getSharedPreferences("astra", MODE_PRIVATE).edit().putLong("last_alarm_dismissed_at", System.currentTimeMillis()).apply()
             stopWakeOutputs()
             AlarmNotifier.clearWakeAlarm(this)
+            WakeForegroundService.stop(this)
             val snoozed = AlarmScheduler.scheduleSnooze(this, 10)
             getSharedPreferences("astra", MODE_PRIVATE).edit().putBoolean("wake_enabled", snoozed).apply()
             finish()
@@ -137,6 +138,7 @@ class WakeActivity : AppCompatActivity() {
                     put("sourceType", "url")
                     put("source", current.publicUrl)
                     put("loop", true)
+                    put("channel", "music")
                     put("volume", 0.22)
                 }
             )
@@ -194,7 +196,14 @@ class WakeActivity : AppCompatActivity() {
             val action = plan.actions.optJSONObject(i) ?: continue
             if (action.optString("command") == "phone.audio.play") {
                 val params = action.optJSONObject("params")
-                params?.put("volume", 0.22)
+                val chosenChannel = params?.optString("channel").orEmpty().ifBlank {
+                    val source = params?.optString("source").orEmpty()
+                    if (wakeMusicAssets.any { it.publicUrl == source }) "music" else "sfx"
+                }
+                params?.put("channel", chosenChannel)
+                if (chosenChannel == "music") {
+                    params?.put("volume", 0.22)
+                }
                 val source = params?.optString("source").orEmpty()
                 if (source.isNotBlank()) {
                     currentMusicAsset = wakeMusicAssets.firstOrNull { it.publicUrl == source } ?: currentMusicAsset
@@ -344,4 +353,6 @@ class WakeActivity : AppCompatActivity() {
         stopWakeOutputs()
         super.onDestroy()
     }
+}
+   }
 }
