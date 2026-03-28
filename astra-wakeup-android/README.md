@@ -1,6 +1,6 @@
-# Astra Wake-Up Android
+# Astra Android
 
-Yes, this is the real Android app for Astra wake-ups **and** direct OpenClaw chat/control on Android.
+Yes, this is the real Android app for Astra wake-ups, chat/control, reminders, context features, and direct OpenClaw connection on Android.
 
 ## Current status
 As of the latest token-first UI pass, the Android app can now:
@@ -65,18 +65,18 @@ APK path:
 This repo now builds and publishes a rolling debug APK on pushes to `main`.
 
 ### Workflow
-- **Build Astra Android APK**
+- **Build Astra Android**
 
 ### Rolling release
 - tag: `astra-latest`
 - asset: `app-debug.apk`
 
 Direct download pattern:
-`https://github.com/EpicIsTheOne/astra-wakeup/releases/download/astra-latest/app-debug.apk`
+`https://github.com/EpicIsTheOne/Astra/releases/download/astra-latest/app-debug.apk`
 
 ## Release policy (current)
 - Rolling release stays on **debug APK** for quick internal testing.
-- Signed release builds are now available through the manual workflow **Release Astra Android APK (signed)**.
+- Signed release builds are now available through the manual workflow **Release Astra Android (signed)**.
 - Use the signed release APK for installs that should support normal in-place updates.
 
 ## Still TODO
@@ -89,7 +89,7 @@ Direct download pattern:
 ## Signed release workflow
 Once repository signing secrets are configured, you can run the manual GitHub Actions workflow:
 
-- **Release Astra Android APK (signed)**
+- **Release Astra Android (signed)**
 
 This builds a signed `release` APK and publishes it as a GitHub Release asset.
 See `RELEASE_SIGNING.md` for the required secrets and setup.
