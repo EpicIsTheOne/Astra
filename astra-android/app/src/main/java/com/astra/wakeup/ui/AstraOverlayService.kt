@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
@@ -41,12 +42,12 @@ class AstraOverlayService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_EXPAND -> {
-                startForeground(NOTIFICATION_ID, buildNotification())
+                startOverlayForeground()
                 showPanelIfNeeded()
                 return START_STICKY
             }
             else -> {
-                startForeground(NOTIFICATION_ID, buildNotification())
+                startOverlayForeground()
                 showOrbIfNeeded()
                 return START_STICKY
             }
@@ -61,6 +62,19 @@ class AstraOverlayService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun startOverlayForeground() {
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
 
     private fun buildNotification(): Notification {
         val expandPending = PendingIntent.getService(
