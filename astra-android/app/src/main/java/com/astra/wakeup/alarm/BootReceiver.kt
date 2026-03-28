@@ -3,6 +3,7 @@ package com.astra.wakeup.alarm
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import com.astra.wakeup.ui.ContextOrchestratorService
 import com.astra.wakeup.ui.InterventionRepository
 import com.astra.wakeup.ui.OpenClawNodeService
@@ -17,7 +18,10 @@ class BootReceiver : BroadcastReceiver() {
             com.astra.wakeup.ui.ReminderScheduler.rescheduleAll(context)
             OpenClawNodeService.start(context)
             if (InterventionRepository(context).getState().enabled) {
-                context.startService(Intent(context, ContextOrchestratorService::class.java))
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, ContextOrchestratorService::class.java)
+                )
             }
         }
     }

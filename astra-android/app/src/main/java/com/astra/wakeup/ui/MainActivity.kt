@@ -695,7 +695,10 @@ class MainActivity : AppCompatActivity() {
         refreshInterventionStatus()
         if (isConnectedState()) OpenClawNodeService.start(this)
         if (isConnectedState() && InterventionRepository(this).getState().enabled) {
-            startService(Intent(this, ContextOrchestratorService::class.java))
+            androidx.core.content.ContextCompat.startForegroundService(
+                this,
+                Intent(this, ContextOrchestratorService::class.java)
+            )
         }
         AlarmNotifier.showWakeAlarm(this)
         AlarmNotifier.clearWakeAlarm(this)
@@ -915,7 +918,10 @@ class MainActivity : AppCompatActivity() {
             repo.saveState(state.copy(enabled = isChecked))
             refreshInterventionStatus()
             if (isChecked) {
-                startService(Intent(this, ContextOrchestratorService::class.java))
+                androidx.core.content.ContextCompat.startForegroundService(
+                    this,
+                    Intent(this, ContextOrchestratorService::class.java)
+                )
             }
         }
 

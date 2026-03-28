@@ -117,8 +117,14 @@ class ContextActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnStartContext).setOnClickListener {
-            startService(Intent(this, ContextOrchestratorService::class.java))
-            startService(Intent(this, AstraBrainService::class.java))
+            androidx.core.content.ContextCompat.startForegroundService(
+                this,
+                Intent(this, ContextOrchestratorService::class.java)
+            )
+            androidx.core.content.ContextCompat.startForegroundService(
+                this,
+                Intent(this, AstraBrainService::class.java)
+            )
             Toast.makeText(this, "Intervention service started", Toast.LENGTH_SHORT).show()
         }
 
