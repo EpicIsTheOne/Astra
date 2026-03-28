@@ -468,12 +468,12 @@ class MainActivity : AppCompatActivity() {
             btnTestFullScreenAlarm.isEnabled = connected
             btnNotificationSettings.isEnabled = connected
             btnOpenChat.isEnabled = connected
-            btnOpenAstraPanel.isEnabled = connected
+            btnOpenAstraPanel.isEnabled = true
             btnOpenReminders.isEnabled = connected
             btnUsageAccess.isEnabled = connected
             btnInterventionSettings.isEnabled = connected
             btnOpenChat.text = if (connected) "Open Chat" else "Open Chat (connect first)"
-            btnOpenAstraPanel.text = if (connected) "Open Astra Panel" else "Open Astra Panel (connect first)"
+            btnOpenAstraPanel.text = if (AstraOverlayController.canDrawOverlays(this@MainActivity)) "Enable Astra Everywhere (overlay beta)" else "Open Astra Panel / Enable Overlay"
             btnOpenReminders.text = if (connected) "Open Reminders + Task Board" else "Open Reminders + Task Board (connect first)"
             tvWakeHint.text = if (connected) {
                 "Pick any wake time you want. Astra will keep trying to wake you up until you tap I'm awake, Talk back only listens when you press it, and wake-ready Media Center assets can be used for audio choices."
@@ -903,12 +903,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnOpenAstraPanel.setOnClickListener {
+            if (AstraOverlayController.canDrawOverlays(this)) {
+                AstraOverlayController.startOverlay(this)
+                Toast.makeText(this, "Astra overlay beta enabled", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            Toast.makeText(this, "Grant overlay permission to enable Astra everywhere", Toast.LENGTH_LONG).show()
+            startActivity(AstraOverlayController.overlayPermissionIntent(this))
             if (!isConnectedState()) {
-                Toast.makeText(this, "Opening Astra panel in test mode", Toast.LENGTH_SHORT).show()
                 applyConnectionVisualState(
                     title = "Astra panel opened in test mode",
-                    details = "The panel can open without a live connection now. Connect this phone when you want real OpenClaw replies.",
-                    banner = "Astra panel is available even before connection now.",
+                    details = "The panel can open without a live connection now. Grant overlay permission for the floating orb, then connect this phone when you want real OpenClaw replies.",
+                    banner = "Overlay permission is the next step for Astra everywhere.",
                     bannerBackground = "#1E293B",
                     bannerText = "#E2E8F0"
                 )
