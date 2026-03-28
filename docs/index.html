@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Astra APK Download</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Inter, system-ui, sans-serif;
+      background: #0f1220;
+      color: #f5f7ff;
+    }
+    main {
+      max-width: 42rem;
+      padding: 2rem;
+      text-align: center;
+    }
+    a { color: #8ab4ff; }
+    code {
+      background: rgba(255,255,255,.08);
+      padding: .15rem .35rem;
+      border-radius: .35rem;
+    }
+    .muted { color: #b7bfd6; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Astra signed APK</h1>
+    <p id="status" class="muted">Looking for the newest signed release…</p>
+    <p><a id="fallback" href="https://github.com/EpicIsTheOne/astra-wakeup/releases">Open releases manually</a></p>
+  </main>
+  <script>
+    const statusEl = document.getElementById('status');
+    const fallbackEl = document.getElementById('fallback');
+
+    async function go() {
+      const api = 'https://api.github.com/repos/EpicIsTheOne/astra-wakeup/releases?per_page=20';
+      const res = await fetch(api, {
+        headers: { 'Accept': 'application/vnd.github+json' }
+      });
+      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+      const releases = await res.json();
+      const match = releases.find(release =>
+        Array.isArray(release.assets) &&
+        release.assets.some(asset => asset.name === 'app-release.apk')
+      );
+      if (!match) {
+        statusEl.textContent = 'No signed APK release was found yet. Open the releases page instead.';
+        return;
+      }
+      const asset = match.assets.find(asset => asset.name === 'app-release.apk');
+      statusEl.innerHTML = `Redirecting to <code>${match.tag_name}</code>…`;
+      fallbackEl.href = asset.browser_download_url;
+      fallbackEl.textContent = 'Download the APK directly';
+      window.location.replace(asset.browser_download_url);
+    }
+
+    go().catch(error => {
+      console.error(error);
+      statusEl.textContent = 'Could not contact GitHub automatically. Open the releases page instead.';
+    });
+  </script>
+</body>
+</html>
