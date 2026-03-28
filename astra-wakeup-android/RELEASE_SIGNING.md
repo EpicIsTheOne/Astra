@@ -1,6 +1,6 @@
 # Signed Release Setup
 
-Astra Wake-Up can now build a signed `release` APK through GitHub Actions.
+Astra can now build a signed `release` APK through GitHub Actions.
 
 ## Required repository secrets
 Add these repository secrets before running the signed release workflow:
@@ -37,7 +37,7 @@ base64 < astra-release.keystore | tr -d '
 Save the resulting single-line output as `ASTRA_KEYSTORE_B64`.
 
 ## Workflow
-Run **Release Astra Android APK (signed)** from GitHub Actions and provide:
+Run **Release Astra Android (signed)** from GitHub Actions and provide:
 
 - `release_tag` — for example `v0.2.0`
 - `release_name` — release title shown on GitHub
