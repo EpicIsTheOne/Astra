@@ -29,11 +29,20 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.astra.wakeup.R
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
 class AstraOverlayActivity : AppCompatActivity() {
+    private data class ConversationTurn(
+        val speaker: String,
+        val message: String,
+        val isAstra: Boolean,
+        val timestampMs: Long = System.currentTimeMillis()
+    )
+
     private var recognizer: SpeechRecognizer? = null
+    private val conversationTurns = mutableListOf<ConversationTurn>()
     private var isListening = false
     private var waitingForReply = false
     private var autoRelistenEnabled = true
@@ -101,8 +110,13 @@ class AstraOverlayActivity : AppCompatActivity() {
         panelCard.alpha = 0f
         panelCard.animate().translationY(0f).alpha(1f).setDuration(220).start()
 
+        loadConversationHistory()
         updateOrb(OrbMode.IDLE)
-        appendMessage("Astra", "Panel ready. Summon me with a tap, not fake background hotword nonsense.", true)
+        if (conversationTurns.isEmpty()) {
+            appendMessage("Astra", "Panel ready. Summon me with a tap, not fake background hotword nonsense.", true)
+        } else {
+            renderConversationHistory()
+        }
 
         btnClose.setOnClickListener { finish() }
         btnRetryListen.setOnClickListener {
@@ -145,9 +159,17 @@ class AstraOverlayActivity : AppCompatActivity() {
     }
 
     private fun appendMessage(speaker: String, message: String, isAstra: Boolean) {
-        val speakerColor = if (isAstra) Color.parseColor("#F472B6") else Color.parseColor("#60A5FA")
-        val bodyColor = if (isAstra) Color.parseColor("#FCE7F3") else Color.parseColor("#E5E7EB")
-        val prefix = "$speaker: "
+        val turn = ConversationTurn(speaker = speaker, message = message, isAstra = isAstra)
+        conversationTurns += turn
+        trimConversationHistory()
+        appendTurnToConversationView(turn)
+        saveConversationHistory()
+    }
+
+    private fun appendTurnToConversationView(turn: ConversationTurn) {
+        val speakerColor = if (turn.isAstra) Color.parseColor("#F472B6") else Color.parseColor("#60A5FA")
+        val bodyColor = if (turn.isAstra) Color.parseColor("#FCE7F3") else Color.parseColor("#E5E7EB")
+        val prefix = "${turn.speaker}: "
         val line = SpannableStringBuilder()
         if (tvConversation.text.isNotEmpty()) line.append("\n\n")
 
@@ -155,7 +177,7 @@ class AstraOverlayActivity : AppCompatActivity() {
             setSpan(ForegroundColorSpan(speakerColor), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(StyleSpan(android.graphics.Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        val bodySpan = SpannableString(message).apply {
+        val bodySpan = SpannableString(turn.message).apply {
             setSpan(ForegroundColorSpan(bodyColor), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
 
@@ -163,6 +185,56 @@ class AstraOverlayActivity : AppCompatActivity() {
         line.append(bodySpan)
         tvConversation.append(line)
         scrollConversation.post { scrollConversation.fullScroll(android.view.View.FOCUS_DOWN) }
+    }
+
+    private fun renderConversationHistory() {
+        tvConversation.text = ""
+        conversationTurns.forEach { appendTurnToConversationView(it) }
+    }
+
+    private fun trimConversationHistory(maxTurns: Int = 32) {
+        while (conversationTurns.size > maxTurns) {
+            conversationTurns.removeAt(0)
+        }
+    }
+
+    private fun loadConversationHistory() {
+        conversationTurns.clear()
+        val prefs = getSharedPreferences("astra", MODE_PRIVATE)
+        val raw = prefs.getString("astra_overlay_conversation", null).orEmpty()
+        if (raw.isBlank()) return
+        runCatching {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val speaker = obj.optString("speaker").trim()
+                val message = obj.optString("message").trim()
+                if (speaker.isBlank() || message.isBlank()) continue
+                conversationTurns += ConversationTurn(
+                    speaker = speaker,
+                    message = message,
+                    isAstra = obj.optBoolean("isAstra", false),
+                    timestampMs = obj.optLong("timestampMs", System.currentTimeMillis())
+                )
+            }
+            trimConversationHistory()
+        }
+    }
+
+    private fun saveConversationHistory() {
+        val arr = JSONArray()
+        conversationTurns.forEach { turn ->
+            arr.put(JSONObject().apply {
+                put("speaker", turn.speaker)
+                put("message", turn.message)
+                put("isAstra", turn.isAstra)
+                put("timestampMs", turn.timestampMs)
+            })
+        }
+        getSharedPreferences("astra", MODE_PRIVATE)
+            .edit()
+            .putString("astra_overlay_conversation", arr.toString())
+            .apply()
     }
 
     private fun askAstra(text: String) {
