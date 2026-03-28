@@ -508,6 +508,79 @@
                 android:textColor="#FFFFFF" />
         </LinearLayout>
 
+
+        <LinearLayout
+            android:id="@+id/layoutUpdateCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="#162033"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Updater"
+                android:textColor="#F8FAFC"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvUpdateStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Updater idle"
+                android:textColor="#F8FAFC"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvUpdateHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Check for the newest signed Astra build, download it, then let Android install it."
+                android:textColor="#CBD5E1"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/cbAutoUpdate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Auto-check on launch and auto-download newer signed builds"
+                android:textColor="#E2E8F0" />
+
+            <Button
+                android:id="@+id/btnCheckUpdates"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:backgroundTint="#8B5CF6"
+                android:text="Check for updates"
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnDownloadUpdate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#EC4899"
+                android:text="Download latest signed build"
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnInstallUpdate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#334155"
+                android:text="Install downloaded update"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/layoutInterventionCard"
             android:layout_width="match_parent"
