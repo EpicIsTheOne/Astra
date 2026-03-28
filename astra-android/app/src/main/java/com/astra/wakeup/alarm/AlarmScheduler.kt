@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import com.astra.wakeup.ui.MainActivity
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -42,9 +43,9 @@ object AlarmScheduler {
             .withNano(0)
         if (next.isBefore(ZonedDateTime.now(zone))) next = next.plusDays(1)
 
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.RTC_WAKEUP,
-            next.toInstant().toEpochMilli(),
+        val triggerAt = next.toInstant().toEpochMilli()
+        alarmManager.setAlarmClock(
+            AlarmManager.AlarmClockInfo(triggerAt, showIntent(context)),
             pending
         )
         context.getSharedPreferences("astra", Context.MODE_PRIVATE).edit().putInt("wake_snooze_count", 0).apply()
@@ -63,8 +64,23 @@ object AlarmScheduler {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pending = wakeIntent(context)
         val at = System.currentTimeMillis() + minutes * 60_000L
-        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
+        alarmManager.setAlarmClock(
+            AlarmManager.AlarmClockInfo(at, showIntent(context)),
+            pending
+        )
         return true
+    }
+
+    private fun showIntent(context: Context): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        return PendingIntent.getActivity(
+            context,
+            551,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun wakeIntent(context: Context): PendingIntent {

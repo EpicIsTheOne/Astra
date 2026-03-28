@@ -700,8 +700,6 @@ class MainActivity : AppCompatActivity() {
                 Intent(this, ContextOrchestratorService::class.java)
             )
         }
-        AlarmNotifier.showWakeAlarm(this)
-        AlarmNotifier.clearWakeAlarm(this)
         refreshUpdateVersionLine()
         refreshUpdateNotes()
         refreshDownloadedUpdateState()
@@ -866,7 +864,22 @@ class MainActivity : AppCompatActivity() {
             saveMainSettings()
             prefs.edit().putBoolean("wake_enabled", true).apply()
             refreshWakeAlarmStatus()
+
+            if (!AlarmDiagnostics.notificationsEnabled(this)) {
+                Toast.makeText(this, "Enable notifications for Astra first", Toast.LENGTH_LONG).show()
+                startActivity(AlarmDiagnostics.appNotificationSettingsIntent(this))
+                return@setOnClickListener
+            }
+
+            if (!AlarmDiagnostics.fullScreenIntentLikelyAllowed(this)) {
+                tvWakeAlarmStatus.text = "Wake alarm: full-screen alarm permission or channel settings need attention"
+                Toast.makeText(this, "Allow Astra full-screen alarms, then try again", Toast.LENGTH_LONG).show()
+                startActivity(AlarmDiagnostics.fullScreenIntentSettingsIntent(this))
+                return@setOnClickListener
+            }
+
             WakeForegroundService.start(this)
+            startActivity(Intent(this, WakeActivity::class.java))
             Toast.makeText(this, "Triggered full-screen alarm test", Toast.LENGTH_SHORT).show()
         }
 
