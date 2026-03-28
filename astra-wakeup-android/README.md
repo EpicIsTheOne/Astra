@@ -75,9 +75,9 @@ Direct download pattern:
 `https://github.com/EpicIsTheOne/astra-wakeup/releases/download/astra-latest/app-debug.apk`
 
 ## Release policy (current)
-- Rolling release stays on **debug APK** for now.
-- Signed release workflow has been intentionally removed/disabled for the time being.
-- Revisit signing only when the release channel and install/update story are stable enough to justify it.
+- Rolling release stays on **debug APK** for quick internal testing.
+- Signed release builds are now available through the manual workflow **Release Astra Android APK (signed)**.
+- Use the signed release APK for installs that should support normal in-place updates.
 
 ## Still TODO
 - Finish smoothing auth edge-cases so approval/token/device-token behavior feels fully seamless.
@@ -85,3 +85,11 @@ Direct download pattern:
 - Polish spacing/iconography/status visuals on the main screen even further.
 - Bundle custom SFX pack and volume profiles.
 - Reintroduce a better pairing-code path later if/when it is truly reliable.
+
+## Signed release workflow
+Once repository signing secrets are configured, you can run the manual GitHub Actions workflow:
+
+- **Release Astra Android APK (signed)**
+
+This builds a signed `release` APK and publishes it as a GitHub Release asset.
+See `RELEASE_SIGNING.md` for the required secrets and setup.
