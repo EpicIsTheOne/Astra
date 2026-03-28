@@ -702,7 +702,16 @@ class MainActivity : AppCompatActivity() {
         refreshUpdateVersionLine()
         refreshUpdateNotes()
         refreshDownloadedUpdateState()
-        registerReceiver(downloadCompleteReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                downloadCompleteReceiver,
+                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+                Context.RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(downloadCompleteReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        }
         if (cbAutoUpdate.isChecked) checkForUpdates(autoTriggered = true)
         runStatusCheck()
 

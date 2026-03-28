@@ -35,7 +35,12 @@ class SignalCollectors(private val context: Context) {
             addAction(Intent.ACTION_HEADSET_PLUG)
             addAction(Intent.ACTION_TIME_TICK)
         }
-        context.registerReceiver(receiver, f)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, f, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, f)
+        }
     }
 
     fun stop() {

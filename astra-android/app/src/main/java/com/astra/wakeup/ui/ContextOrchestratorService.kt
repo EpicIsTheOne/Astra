@@ -75,7 +75,12 @@ class ContextOrchestratorService : Service() {
             addAction(AudioManagerCompat.ACTION_AUDIO_BECOMING_NOISY)
             addAction(Intent.ACTION_TIME_TICK)
         }
-        registerReceiver(receiver, f)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, f, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(receiver, f)
+        }
         handler.post(appUsageTick)
     }
 
