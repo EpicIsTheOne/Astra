@@ -15,7 +15,8 @@ object UpdateClient {
         val htmlUrl: String,
         val downloadUrl: String,
         val publishedAt: String,
-        val assetName: String
+        val assetName: String,
+        val body: String
     )
 
     private val http = OkHttpClient.Builder()
@@ -46,7 +47,8 @@ object UpdateClient {
                             htmlUrl = release.optString("html_url"),
                             downloadUrl = asset.optString("browser_download_url"),
                             publishedAt = release.optString("published_at"),
-                            assetName = asset.optString("name")
+                            assetName = asset.optString("name"),
+                            body = release.optString("body")
                         )
                     }
                 }

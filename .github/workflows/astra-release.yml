@@ -10,7 +10,7 @@ on:
       release_name:
         description: 'Release title'
         required: true
-        default: 'Astra Android'
+        default: ''
       prerelease:
         description: 'Publish as prerelease'
         required: true
@@ -83,10 +83,23 @@ jobs:
           set -euo pipefail
           VERSION_NAME="${INPUT_TAG#v}"
           VERSION_CODE="${GITHUB_RUN_NUMBER}"
+          if [ -n "${INPUT_NAME:-}" ]; then
+            RELEASE_TITLE="$INPUT_NAME"
+          else
+            RELEASE_TITLE="Astra Android ${VERSION_NAME}"
+            if [ "${INPUT_PRERELEASE}" = "true" ]; then
+              RELEASE_TITLE="${RELEASE_TITLE} (signed prerelease)"
+            else
+              RELEASE_TITLE="${RELEASE_TITLE}"
+            fi
+          fi
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "release_title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
         env:
           INPUT_TAG: ${{ inputs.release_tag }}
+          INPUT_NAME: ${{ inputs.release_name }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
 
       - name: Build signed release APK
         run: >-
@@ -144,7 +157,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag }}
-          name: ${{ inputs.release_name }}
+          name: ${{ steps.version_meta.outputs.release_title }}
           prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
           files: dist/app-release.apk

@@ -588,6 +588,24 @@
                 android:backgroundTint="#334155"
                 android:text="Install downloaded update"
                 android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnSkipUpdate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#475569"
+                android:text="Skip this version"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/tvUpdateNotes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Release notes will show here when Astra finds a newer build."
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout

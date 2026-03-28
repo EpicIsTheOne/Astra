@@ -106,6 +106,8 @@ class MainActivity : AppCompatActivity() {
         val btnCheckUpdates = findViewById<Button>(R.id.btnCheckUpdates)
         val btnDownloadUpdate = findViewById<Button>(R.id.btnDownloadUpdate)
         val btnInstallUpdate = findViewById<Button>(R.id.btnInstallUpdate)
+        val btnSkipUpdate = findViewById<Button>(R.id.btnSkipUpdate)
+        val tvUpdateNotes = findViewById<TextView>(R.id.tvUpdateNotes)
 
         val defaultExternalUrl = "http://72.60.29.204:18789"
         val savedApiUrl = prefs.getString("api_url", null)?.takeIf { it.isNotBlank() }
@@ -120,6 +122,7 @@ class MainActivity : AppCompatActivity() {
         cbPunish.isChecked = prefs.getBoolean("punish", true)
         cbInterventionsEnabled.isChecked = InterventionRepository(this).getState().enabled
         cbAutoUpdate.isChecked = prefs.getBoolean("updater_auto_check", true)
+        val skippedUpdateTagKey = "updater_skip_tag"
 
         var wakeHour = prefs.getInt("wake_hour", 5)
         var wakeMinute = prefs.getInt("wake_minute", 50)
@@ -141,9 +144,34 @@ class MainActivity : AppCompatActivity() {
             tvUpdateVersions.text = "Installed: $installed | Latest: $latest"
         }
 
+        fun refreshUpdateNotes() {
+            val body = latestRelease?.body?.trim().orEmpty()
+            tvUpdateNotes.text = if (body.isBlank()) {
+                "Release notes will show here when Astra finds a newer build."
+            } else {
+                val cleaned = body.lines()
+                    .map { it.trimEnd() }
+                    .filter { it.isNotBlank() }
+                    .take(6)
+                    .joinToString("\n")
+                "Release notes:\n$cleaned"
+            }
+        }
+
+        fun skippedTag(): String = prefs.getString(skippedUpdateTagKey, "") ?: ""
+
+        fun isSkipped(asset: UpdateClient.ReleaseAsset): Boolean = skippedTag() == asset.tagName
+
+        fun setSkippedTag(tag: String?) {
+            prefs.edit().apply {
+                if (tag.isNullOrBlank()) remove(skippedUpdateTagKey) else putString(skippedUpdateTagKey, tag)
+            }.apply()
+        }
+
         fun setUpdateButtonsEnabled(enabled: Boolean) {
             btnCheckUpdates.isEnabled = enabled
             btnDownloadUpdate.isEnabled = enabled
+            btnSkipUpdate.isEnabled = enabled
         }
 
         fun refreshDownloadedUpdateState() {
@@ -151,6 +179,7 @@ class MainActivity : AppCompatActivity() {
             val tag = ApkUpdateInstaller.currentDownloadedTag(this)
             btnInstallUpdate.visibility = if (file.exists()) View.VISIBLE else View.GONE
             btnInstallUpdate.isEnabled = file.exists()
+            btnSkipUpdate.visibility = if (latestRelease != null) View.VISIBLE else View.GONE
             if (file.exists() && tag.isNotBlank() && tvUpdateStatus.text.toString() == "Updater idle") {
                 tvUpdateStatus.text = "Downloaded update ready"
                 tvUpdateHint.text = "Astra $tag is already downloaded. Tap Install downloaded update when you're ready."
@@ -178,7 +207,9 @@ class MainActivity : AppCompatActivity() {
 
         fun downloadRelease(asset: UpdateClient.ReleaseAsset, autoTriggered: Boolean = false) {
             latestRelease = asset
+            setSkippedTag(null)
             refreshUpdateVersionLine()
+            refreshUpdateNotes()
             val existing = ApkUpdateInstaller.downloadedFile(this)
             if (existing.exists()) existing.delete()
             val id = ApkUpdateInstaller.enqueueDownload(this, asset)
@@ -201,10 +232,16 @@ class MainActivity : AppCompatActivity() {
                     result.onSuccess { asset ->
                         latestRelease = asset
                         refreshUpdateVersionLine()
+                        refreshUpdateNotes()
                         val newer = UpdateClient.isNewerRelease(currentVersionName(), asset.tagName)
+                        val skipped = isSkipped(asset)
                         val downloadedTag = ApkUpdateInstaller.currentDownloadedTag(this)
                         val downloadedFileExists = ApkUpdateInstaller.downloadedFile(this).exists()
                         when {
+                            newer && skipped -> {
+                                tvUpdateStatus.text = "Update skipped"
+                                tvUpdateHint.text = "You told Astra to ignore ${asset.tagName} for now. Unskip it by checking again after a newer release arrives, or download it manually."
+                            }
                             newer && cbAutoUpdate.isChecked && (!downloadedFileExists || downloadedTag != asset.tagName) -> {
                                 tvUpdateStatus.text = "New version found"
                                 tvUpdateHint.text = "Astra ${asset.tagName} is newer than ${currentVersionName()}. Auto-download is on, so I'm grabbing it now."
@@ -225,12 +262,14 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                         refreshDownloadedUpdateState()
+                        btnSkipUpdate.visibility = View.VISIBLE
                     }.onFailure { err ->
                         if (!autoTriggered) {
                             tvUpdateStatus.text = "Update check failed"
                             tvUpdateHint.text = err.message ?: "Couldn't contact GitHub releases right now."
                             Toast.makeText(this, "Update check failed", Toast.LENGTH_SHORT).show()
                         }
+                        refreshUpdateNotes()
                     }
                 }
             }.start()
@@ -247,6 +286,7 @@ class MainActivity : AppCompatActivity() {
                     val tag = ApkUpdateInstaller.currentDownloadedTag(this@MainActivity)
                     tvUpdateStatus.text = "Update downloaded"
                     tvUpdateHint.text = "Astra ${tag.ifBlank { "update" }} is ready. Tap Install downloaded update to let Android finish the upgrade."
+                    setSkippedTag(null)
                     refreshDownloadedUpdateState()
                     beginInstallDownloadedUpdate()
                 } else {
@@ -660,6 +700,7 @@ class MainActivity : AppCompatActivity() {
         AlarmNotifier.showWakeAlarm(this)
         AlarmNotifier.clearWakeAlarm(this)
         refreshUpdateVersionLine()
+        refreshUpdateNotes()
         refreshDownloadedUpdateState()
         registerReceiver(downloadCompleteReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
         if (cbAutoUpdate.isChecked) checkForUpdates(autoTriggered = true)
@@ -897,6 +938,18 @@ class MainActivity : AppCompatActivity() {
 
         btnInstallUpdate.setOnClickListener {
             beginInstallDownloadedUpdate()
+        }
+
+        btnSkipUpdate.setOnClickListener {
+            val asset = latestRelease
+            if (asset == null) {
+                Toast.makeText(this, "No release loaded yet", Toast.LENGTH_SHORT).show()
+            } else {
+                setSkippedTag(asset.tagName)
+                tvUpdateStatus.text = "Update skipped"
+                tvUpdateHint.text = "Astra will ignore ${asset.tagName} until a newer release shows up or you manually download it."
+                Toast.makeText(this, "Skipped ${asset.tagName}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
