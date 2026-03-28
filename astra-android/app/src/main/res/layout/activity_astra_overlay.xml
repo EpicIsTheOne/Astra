@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#8C020617">
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent">
 
     <LinearLayout
         android:id="@+id/overlayPanelCard"
@@ -114,7 +114,7 @@
             android:ellipsize="end"
             android:maxLines="8"
             android:padding="14dp"
-            android:text="Waiting for Astra to say something interesting…"
+            android:text=""
             android:textColor="#E5E7EB"
             android:textSize="15sp" />
 

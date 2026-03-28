@@ -68,7 +68,7 @@ class AstraOverlayActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_astra_overlay)
         window.setGravity(Gravity.BOTTOM)
-        window.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+        window.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
 
         phoneControl = PhoneControlExecutor(this)
         phoneControl.setSpeechStartedListener {
@@ -202,7 +202,8 @@ class AstraOverlayActivity : AppCompatActivity() {
 
     private fun showLatestAstraReply() {
         val latestAstra = conversationTurns.lastOrNull { it.isAstra }?.message
-        tvLatestReply.text = latestAstra ?: "Waiting for Astra to say something interesting…"
+        tvLatestReply.text = latestAstra.orEmpty()
+        tvLatestReply.visibility = if (latestAstra.isNullOrBlank()) View.GONE else View.VISIBLE
         applyLatestReplyExpansion()
     }
 
@@ -567,3 +568,4 @@ class AstraOverlayActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
+

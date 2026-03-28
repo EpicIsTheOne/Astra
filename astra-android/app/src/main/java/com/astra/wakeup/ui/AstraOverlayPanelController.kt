@@ -213,6 +213,7 @@ class AstraOverlayPanelController(
         if (isAstra) {
             latestReplyExpanded = false
             tvLatestReply.text = message
+            tvLatestReply.visibility = View.VISIBLE
             applyLatestReplyExpansion()
         }
         saveConversationHistory()
