@@ -1,13 +1,15 @@
 # Astra Android
 
-Yes, this is the real Android app for Astras, chat/control, reminders, context features, and direct OpenClaw connection on Android.
+Yes, this is the real Android app for Astra: wake alarms, chat/control, reminders, context features, and direct OpenClaw connection on Android.
 
 ## Current status
-As of the latest token-first UI pass, the Android app can now:
+As of the current session, the Android app can now:
 - connect this phone directly to OpenClaw
 - open chat successfully through the Gateway
 - configure alarm and wake behavior from the same app
 - publish fresh debug APKs automatically through GitHub Actions to the rolling `astra-latest` release
+- build signed release APKs through a manual GitHub Actions workflow
+- check for newer signed builds from inside the app and hand them off to Android installer flow
 
 The current supported connection path is intentionally **token-first**.
 
@@ -21,6 +23,7 @@ The current supported connection path is intentionally **token-first**.
 - Reschedules after reboot.
 - Connects directly to the OpenClaw Gateway for chat/control.
 - Persists per-install device identity and paired-device auth state.
+- Includes an in-app updater for signed releases.
 
 ## Supported OpenClaw connect flow (current)
 Main UI now supports this path first:
@@ -41,11 +44,14 @@ The home screen is now intentionally organized as:
 1. **Connect this phone**
 2. **Wake controls**
 3. **Chat**
+4. **Updater**
+5. **Interventions**
 
 Notes:
 - pairing/bootstrap UX is currently de-emphasized and removed from the main screen because the shared-token path is more reliable right now
 - advanced/debug gateway controls are hidden behind **Advanced gateway options**
 - wake + chat are visually gated behind connection state
+- updater is aimed at rapid signed-build testing
 
 ## Build prerequisites (on a machine with Android SDK)
 - Java 17
@@ -62,7 +68,7 @@ APK path:
 `app/build/outputs/apk/debug/app-debug.apk`
 
 ## GitHub Actions rolling debug APK
-This repo now builds and publishes a rolling debug APK on pushes to `main`.
+This repo builds and publishes a rolling debug APK on pushes to `main`.
 
 ### Workflow
 - **Build Astra Android**
@@ -74,10 +80,34 @@ This repo now builds and publishes a rolling debug APK on pushes to `main`.
 Direct download pattern:
 `https://github.com/EpicIsTheOne/Astra/releases/download/astra-latest/app-debug.apk`
 
-## Release policy (current)
-- Rolling release stays on **debug APK** for quick internal testing.
-- Signed release builds are now available through the manual workflow **Release Astra Android (signed)**.
-- Use the signed release APK for installs that should support normal in-place updates.
+## Signed release workflow
+The repo also supports a manual signed-release workflow.
+
+### Workflow
+- **Release Astra Android (signed)**
+
+### Signed release artifact
+- asset: `app-release.apk`
+
+### Signed release behavior
+- `versionName` is derived from the workflow tag input, e.g. `v0.2.1` → `0.2.1`
+- `versionCode` is derived from the GitHub Actions run number
+- this is intentional so Android update-over-install behaves correctly for testing
+
+See `RELEASE_SIGNING.md` for the secrets/setup details.
+
+## In-app updater
+The updater card on the main screen can:
+- auto-check on launch
+- auto-download newer signed releases
+- show installed vs latest version
+- preview release notes from GitHub release body text
+- skip one specific version
+- launch Android installer for the downloaded APK
+
+Important reality check:
+- on stock Android, the final install still usually needs a user confirmation tap
+- fully silent installs are not expected without elevated device privileges
 
 ## Still TODO
 - Finish smoothing auth edge-cases so approval/token/device-token behavior feels fully seamless.
@@ -85,11 +115,4 @@ Direct download pattern:
 - Polish spacing/iconography/status visuals on the main screen even further.
 - Bundle custom SFX pack and volume profiles.
 - Reintroduce a better pairing-code path later if/when it is truly reliable.
-
-## Signed release workflow
-Once repository signing secrets are configured, you can run the manual GitHub Actions workflow:
-
-- **Release Astra Android (signed)**
-
-This builds a signed `release` APK and publishes it as a GitHub Release asset.
-See `RELEASE_SIGNING.md` for the required secrets and setup.
+- Consider replacing `softprops/action-gh-release@v2` later if the lingering Node 20 warning ever becomes operationally annoying.
