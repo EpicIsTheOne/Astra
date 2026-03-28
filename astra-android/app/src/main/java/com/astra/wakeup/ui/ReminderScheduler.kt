@@ -79,10 +79,15 @@ object ReminderScheduler {
     fun maybeCreateVerificationFollowUp(reminder: ReminderItem): ReminderItem? {
         val shouldFollowUp = reminder.verifyLater || reminder.importance >= 3 || reminder.annoyanceLevel >= 3
         if (!shouldFollowUp) return null
-        val delayMinutes = when {
+        return createVerificationFollowUp(reminder)
+    }
+
+    fun createVerificationFollowUp(reminder: ReminderItem, delayMinutesOverride: Int? = null): ReminderItem {
+        val delayMinutes = delayMinutesOverride ?: when {
             reminder.importance >= 3 && reminder.annoyanceLevel >= 3 -> 4
             reminder.importance >= 3 -> 6
-            else -> 9
+            reminder.annoyanceLevel >= 3 -> 8
+            else -> 10
         }
         return reminder.copy(
             scheduledTimeMillis = System.currentTimeMillis() + delayMinutes * 60_000L,

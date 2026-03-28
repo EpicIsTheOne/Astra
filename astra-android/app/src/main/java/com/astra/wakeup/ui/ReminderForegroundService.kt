@@ -38,7 +38,7 @@ class ReminderForegroundService : Service() {
             putExtra("reminder_id", reminderId)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         })
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -94,7 +94,11 @@ class ReminderForegroundService : Service() {
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, ReminderForegroundService::class.java).apply { action = ACTION_STOP })
+            runCatching {
+                context.startService(Intent(context, ReminderForegroundService::class.java).apply { action = ACTION_STOP })
+            }
+            context.stopService(Intent(context, ReminderForegroundService::class.java))
+            ReminderNotifier.clear(context)
         }
     }
 }

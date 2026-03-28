@@ -23,6 +23,7 @@ import java.util.UUID
 class ReminderActivity : AppCompatActivity() {
     private var recognizer: SpeechRecognizer? = null
     private var isListening = false
+    private var resolutionHandled = false
     private lateinit var phoneControl: PhoneControlExecutor
     private var reminder: ReminderItem? = null
     private val sessionKey = "reminder-${UUID.randomUUID()}"
@@ -69,10 +70,11 @@ class ReminderActivity : AppCompatActivity() {
 
     private fun speakReminderIntro() {
         val item = reminder ?: return
+        val linkedTask = item.linkedTaskId?.let { ReminderRepository.getTask(this, it) }
         val line = if (item.followUpState.contains("verification")) {
-            "Verification check. Did you actually handle this: ${item.title}?"
+            "Alright, status check. Did you actually do ${linkedTask?.title ?: item.title}, or were you just running your mouth?"
         } else {
-            "Reminder time. ${item.title}."
+            "Hey. Reminder time. ${item.title}. If you're not doing it right now, explain yourself."
         }
         findViewById<TextView>(R.id.tvReminderLine).text = line
         phoneControl.execute("phone.tts.speak", JSONObject().put("text", line).put("volume", 0.85))
@@ -83,38 +85,29 @@ class ReminderActivity : AppCompatActivity() {
         val nextTime = ReminderScheduler.computeLaterTime(item)
         val updated = item.copy(scheduledTimeMillis = nextTime, snoozeCount = item.snoozeCount + 1, followUpState = "snoozed", enabled = true)
         ReminderRepository.upsertReminder(this, updated)
-        ReminderNotifier.clear(this)
-        ReminderForegroundService.stop(this)
+        resolutionHandled = true
+        finishReminderSession()
         finish()
     }
 
     private fun markDone() {
         val item = reminder ?: return
-        item.linkedTaskId?.let { taskId ->
-            ReminderRepository.getTask(this, taskId)?.let { task ->
-                ReminderRepository.upsertTask(this, task.copy(done = true, completedAtMillis = System.currentTimeMillis()))
-            }
-        }
-        val followUp = ReminderScheduler.maybeCreateVerificationFollowUp(item)
-        val updated = if (followUp != null) {
-            followUp
-        } else {
-            val nextTime = when (item.repeatRule) {
-                "daily" -> item.scheduledTimeMillis + 24 * 60 * 60 * 1000L
-                "weekly" -> item.scheduledTimeMillis + 7 * 24 * 60 * 60 * 1000L
-                else -> item.scheduledTimeMillis
-            }
-            item.copy(
-                enabled = item.repeatRule != "once",
-                scheduledTimeMillis = nextTime,
-                followUpState = "done",
-                snoozeCount = 0
-            )
-        }
-        ReminderRepository.upsertReminder(this, updated)
+        val followUp = ReminderScheduler.createVerificationFollowUp(item)
+        ReminderRepository.upsertReminder(this, followUp)
+        resolutionHandled = true
+        findViewById<TextView>(R.id.tvReminderLine).text = "Fine. I'll check back in a few minutes and you'd better have actually done it."
+        phoneControl.execute(
+            "phone.tts.speak",
+            JSONObject().put("text", "Fine. I'll check back in a few minutes and you'd better have actually done it.").put("volume", 0.88)
+        )
+        finishReminderSession()
+        finish()
+    }
+
+    private fun finishReminderSession() {
         ReminderNotifier.clear(this)
         ReminderForegroundService.stop(this)
-        finish()
+        runCatching { phoneControl.execute("phone.audio.stop", JSONObject()) }
     }
 
     private fun startListening() {
@@ -164,6 +157,9 @@ class ReminderActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         recognizer?.destroy()
+        if (resolutionHandled) {
+            ReminderNotifier.clear(this)
+        }
         phoneControl.release()
         super.onDestroy()
     }

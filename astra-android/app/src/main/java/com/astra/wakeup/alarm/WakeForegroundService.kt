@@ -32,7 +32,7 @@ class WakeForegroundService : Service() {
                 acquireWakeLock()
                 startForeground(NOTIFICATION_ID, buildNotification())
                 AlarmNotifier.showWakeAlarm(this)
-                return START_STICKY
+                return START_NOT_STICKY
             }
         }
     }
@@ -121,7 +121,9 @@ class WakeForegroundService : Service() {
 
         fun stop(context: Context) {
             val intent = Intent(context, WakeForegroundService::class.java).apply { action = ACTION_STOP }
-            context.startService(intent)
+            runCatching { context.startService(intent) }
+            context.stopService(Intent(context, WakeForegroundService::class.java))
+            AlarmNotifier.clearWakeAlarm(context)
         }
     }
 }

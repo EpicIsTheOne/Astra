@@ -113,6 +113,7 @@ class WakeActivity : AppCompatActivity() {
             WakeProfiles.recordWakeOutcome(this, "awake", activeProfile, currentPhase())
             stopWakeOutputs()
             AlarmNotifier.clearWakeAlarm(this)
+            WakeForegroundService.stop(this)
             finish()
         }
 

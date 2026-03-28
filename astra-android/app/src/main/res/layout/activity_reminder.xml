@@ -80,6 +80,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:backgroundTint="#8B5CF6"
-        android:text="Finee I’ll do it"
+        android:text="Fine, I’m doing it"
         android:textColor="#FFFFFF" />
 </LinearLayout>
