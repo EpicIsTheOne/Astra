@@ -127,6 +127,7 @@ class AstraOverlayPanelController(
 
     fun onShow() {
         updateConnectionBanner()
+        handler.postDelayed({ startSpeechInput(force = true) }, 250)
     }
 
     private fun submitTypedInput() {
