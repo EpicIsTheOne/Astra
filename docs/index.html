@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Astra APK Download</title>
+  <title>Astra Download</title>
   <meta name="theme-color" content="#0f1220">
   <style>
     :root {
@@ -104,16 +104,17 @@
 <body>
   <div class="wrap">
     <main class="card">
-      <div class="eyebrow">Astra Android</div>
-      <h1>Latest signed APK</h1>
-      <p id="status">Looking for the newest signed release so you don’t have to rummage around GitHub like a goblin.</p>
+      <div class="eyebrow">Astra</div>
+      <h1>Install Astra</h1>
+      <p id="status">Looking for the newest signed Astra release so you don’t have to rummage around GitHub like a goblin.</p>
       <div class="cta-row">
-        <a id="download" class="btn primary" href="https://github.com/EpicIsTheOne/astra-wakeup/releases">Download latest signed APK</a>
-        <a class="btn" href="https://github.com/EpicIsTheOne/astra-wakeup/releases">Open releases</a>
+        <a id="download" class="btn primary" href="https://github.com/EpicIsTheOne/Astra/releases">Download latest signed Astra APK</a>
+        <a class="btn" href="https://github.com/EpicIsTheOne/Astra/releases">Open Astra releases</a>
       </div>
       <div class="meta">
-        <div id="tagline">Will redirect automatically when a signed asset named <code>app-release.apk</code> is found.</div>
+        <div id="tagline">Will redirect automatically when the newest signed asset named <code>app-release.apk</code> is found.</div>
         <div class="small">If Android refuses to update over your current install, uninstall the old debug/differently-signed build once, then install the signed one and live a better life.</div>
+        <div class="small"><a href="/Astra/install-android.html" style="color:#8ab4ff">Need install help?</a> Use the Android install guide.</div>
       </div>
     </main>
   </div>
@@ -123,7 +124,7 @@
     const taglineEl = document.getElementById('tagline');
 
     async function go() {
-      const api = 'https://api.github.com/repos/EpicIsTheOne/astra-wakeup/releases?per_page=20';
+      const api = 'https://api.github.com/repos/EpicIsTheOne/Astra/releases?per_page=20';
       const res = await fetch(api, { headers: { 'Accept': 'application/vnd.github+json' } });
       if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
       const releases = await res.json();
@@ -137,7 +138,7 @@
       const asset = match.assets.find(asset => asset.name === 'app-release.apk');
       downloadEl.href = asset.browser_download_url;
       taglineEl.innerHTML = `Found signed build <code>${match.tag_name}</code>. Redirecting now…`;
-      statusEl.textContent = 'Astra found your newest signed APK. Redirect incoming.';
+      statusEl.textContent = 'Astra found your newest signed build. Redirect incoming.';
       setTimeout(() => window.location.replace(asset.browser_download_url), 600);
     }
 
