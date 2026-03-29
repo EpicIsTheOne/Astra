@@ -258,7 +258,7 @@ class OpenClawNodeService : Service() {
 
         fun start(context: Context) {
             val intent = Intent(context, OpenClawNodeService::class.java)
-            androidx.core.content.ContextCompat.startForegroundService(context, intent)
+            runCatching { androidx.core.content.ContextCompat.startForegroundService(context, intent) }
         }
 
         fun stop(context: Context) {
