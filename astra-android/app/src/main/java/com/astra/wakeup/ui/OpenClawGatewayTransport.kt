@@ -58,6 +58,8 @@ data class OpenClawDeviceSignatureStrategy(
     val label: String
 )
 
+private const val PREF_LAST_SHARED_SIGNATURE_STRATEGY = "gateway_last_shared_signature_strategy"
+
 class OpenClawGatewayTransport(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -85,7 +87,7 @@ class OpenClawGatewayTransport(
         onHello: ((JSONObject) -> Unit)? = null
     ): GatewayChatResult {
         if (config.wsUrl.isBlank() || userText.isBlank()) return GatewayChatResult(error = "Missing Gateway URL or text")
-        val strategies = signatureStrategiesFor(config.resolvedAuth())
+        val strategies = signatureStrategiesFor(config.resolvedAuth(), context)
         var lastResult = GatewayChatResult(error = "Gateway handshake aborted")
         for ((index, strategy) in strategies.withIndex()) {
             val result = sendChatAttempt(context, config, userText, timeoutMs, onHello, strategy)
@@ -190,7 +192,7 @@ class OpenClawGatewayTransport(
         onHello: ((JSONObject) -> Unit)? = null
     ): GatewayHistoryResult {
         if (config.wsUrl.isBlank()) return GatewayHistoryResult(error = "Missing Gateway URL")
-        val strategies = signatureStrategiesFor(config.resolvedAuth())
+        val strategies = signatureStrategiesFor(config.resolvedAuth(), context)
         var lastResult = GatewayHistoryResult(error = "Gateway handshake aborted")
         for ((index, strategy) in strategies.withIndex()) {
             val result = fetchHistoryAttempt(context, config, timeoutMs, onHello, strategy)
@@ -274,7 +276,7 @@ class OpenClawGatewayTransport(
         timeoutMs: Long,
         onHello: ((JSONObject) -> Unit)?
     ): Result<OpenClawGatewaySession> {
-        val strategies = signatureStrategiesFor(config.resolvedAuth())
+        val strategies = signatureStrategiesFor(config.resolvedAuth(), context)
         var lastResult: Result<OpenClawGatewaySession> = Result.failure(IllegalStateException("Gateway handshake aborted"))
         for ((index, strategy) in strategies.withIndex()) {
             val result = connectInternal(context, config, timeoutMs, onHello, strategy)
@@ -313,11 +315,15 @@ class OpenClawGatewayTransport(
                         if (json.optBoolean("ok")) {
                             val payload = json.optJSONObject("payload") ?: JSONObject()
                             context?.let {
+                                if (config.resolvedAuth().mode == GatewayAuthMode.SHARED_TOKEN) {
+                                    persistPreferredSharedTokenSignatureStrategy(it, signatureStrategy)
+                                }
                                 OpenClawGatewayDiagnostics.recordHandshake(
                                     context = it,
                                     stage = "connect_hello_ok",
                                     config = config,
-                                    helloPayload = payload
+                                    helloPayload = payload,
+                                    extra = JSONObject().put("signatureStrategy", signatureStrategy?.label ?: "default")
                                 )
                             }
                             onHello?.invoke(payload)
@@ -394,7 +400,8 @@ class OpenClawGatewayTransport(
                 stage = "connect_frame_sent",
                 config = config,
                 nonce = nonce,
-                connectParams = frame.optJSONObject("params")
+                connectParams = frame.optJSONObject("params"),
+                extra = JSONObject().put("signatureStrategy", signatureStrategy?.label ?: "default")
             )
         }
         val sent = webSocket.send(frame.toString())
@@ -490,14 +497,41 @@ class OpenClawGatewayTransport(
         }
     }
 
-    private fun signatureStrategiesFor(resolvedAuth: GatewayResolvedAuth): List<OpenClawDeviceSignatureStrategy?> {
+    private fun signatureStrategiesFor(
+        resolvedAuth: GatewayResolvedAuth,
+        context: Context? = null
+    ): List<OpenClawDeviceSignatureStrategy?> {
         if (resolvedAuth.mode != GatewayAuthMode.SHARED_TOKEN) return listOf(null)
-        return listOf(
+        val defaults = listOf(
             OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V2, OpenClawDeviceSignatureBinding.TOKEN_BOUND, "shared-v2-token"),
             OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V2, OpenClawDeviceSignatureBinding.TOKENLESS, "shared-v2-tokenless"),
             OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V3, OpenClawDeviceSignatureBinding.TOKEN_BOUND, "shared-v3-token"),
             OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V3, OpenClawDeviceSignatureBinding.TOKENLESS, "shared-v3-tokenless")
         )
+        val preferred = context?.let { loadPreferredSharedTokenSignatureStrategy(it) } ?: return defaults
+        return if (preferred == null) defaults else listOf(preferred) + defaults.filterNot { it.label == preferred.label }
+    }
+
+    private fun loadPreferredSharedTokenSignatureStrategy(context: Context): OpenClawDeviceSignatureStrategy? {
+        val label = context.getSharedPreferences("astra", Context.MODE_PRIVATE)
+            .getString(PREF_LAST_SHARED_SIGNATURE_STRATEGY, null)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        return when (label) {
+            "shared-v2-token" -> OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V2, OpenClawDeviceSignatureBinding.TOKEN_BOUND, label)
+            "shared-v2-tokenless" -> OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V2, OpenClawDeviceSignatureBinding.TOKENLESS, label)
+            "shared-v3-token" -> OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V3, OpenClawDeviceSignatureBinding.TOKEN_BOUND, label)
+            "shared-v3-tokenless" -> OpenClawDeviceSignatureStrategy(OpenClawDeviceSignatureVersion.V3, OpenClawDeviceSignatureBinding.TOKENLESS, label)
+            else -> null
+        }
+    }
+
+    private fun persistPreferredSharedTokenSignatureStrategy(context: Context, strategy: OpenClawDeviceSignatureStrategy?) {
+        if (strategy == null) return
+        context.getSharedPreferences("astra", Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREF_LAST_SHARED_SIGNATURE_STRATEGY, strategy.label)
+            .apply()
     }
 
     private fun shouldRetrySharedTokenSignature(
