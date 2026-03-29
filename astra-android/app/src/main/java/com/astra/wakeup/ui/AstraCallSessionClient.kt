@@ -142,6 +142,35 @@ object AstraCallSessionClient {
         }
     }
 
+    fun sendScreenFrame(
+        apiUrl: String,
+        sessionId: String,
+        jpegBase64: String,
+        mimeType: String = "image/jpeg",
+    ): Result<String> {
+        val base = commandCenterBase(apiUrl)
+        if (base.isBlank() || sessionId.isBlank() || jpegBase64.isBlank()) {
+            return Result.failure(IllegalArgumentException("Missing screen upload inputs"))
+        }
+        val body = JSONObject().apply {
+            put("jpegBase64", jpegBase64)
+            put("mimeType", mimeType)
+        }
+        val request = Request.Builder()
+            .url("$base/api/call/$sessionId/screen")
+            .post(body.toString().toRequestBody(jsonMediaType))
+            .build()
+        return runCatching {
+            httpClient.newCall(request).execute().use { response ->
+                val text = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("HTTP ${response.code}: ${text.take(160)}")
+                }
+                text
+            }
+        }
+    }
+
     fun endCall(apiUrl: String, sessionId: String) {
         val base = commandCenterBase(apiUrl)
         if (base.isBlank() || sessionId.isBlank()) return

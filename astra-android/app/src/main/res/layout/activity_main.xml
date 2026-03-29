@@ -506,6 +506,14 @@
                 android:text="Enable Astra everywhere overlay + orb"
                 android:textColor="#E2E8F0" />
 
+            <CheckBox
+                android:id="@+id/cbOverlayCallScreenShare"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Let Astra see my screen during overlay calls"
+                android:textColor="#C4B5FD" />
+
             <TextView
                 android:id="@+id/tvOrbSize"
                 android:layout_width="match_parent"

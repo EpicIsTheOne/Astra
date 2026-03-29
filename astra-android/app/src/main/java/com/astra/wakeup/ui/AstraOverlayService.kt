@@ -56,6 +56,7 @@ class AstraOverlayService : Service() {
     private var micGateUntilMs = 0L
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var screenCaptureController: OverlayScreenCaptureController? = null
     private val callTimerTicker = object : Runnable {
         override fun run() {
             updateCompactCallUi(currentCallState)
@@ -363,6 +364,16 @@ class AstraOverlayService : Service() {
                     onError = { error -> handler.post { updateOverlayCallState(active = true, phase = "audio issue") } },
                     onDebug = { }
                 ).also { it.start() }
+                if (AstraScreenShareStore.isOverlayCallScreenShareEnabled(this) && AstraScreenShareStore.hasProjectionPermission()) {
+                    screenCaptureController?.stop()
+                    screenCaptureController = OverlayScreenCaptureController(
+                        context = this,
+                        onFrame = { jpegBase64 ->
+                            val sessionId = activeCallSessionId ?: return@OverlayScreenCaptureController
+                            AstraCallSessionClient.sendScreenFrame(gatewayConfig.httpBaseUrl, sessionId, jpegBase64)
+                        }
+                    ).also { it.start() }
+                }
                 updateOverlayCallState(active = true, sessionId = started.session.id, phase = "live 🎙️")
                 removePanel()
                 removeOrb()
@@ -381,6 +392,8 @@ class AstraOverlayService : Service() {
         audioRecordStreamer = null
         audioPlaybackQueue?.stop()
         audioPlaybackQueue = null
+        screenCaptureController?.stop()
+        screenCaptureController = null
         pendingVoiceFallbackText = null
         receivedAudioForCurrentTurn = false
         assistantPlaybackActive = false

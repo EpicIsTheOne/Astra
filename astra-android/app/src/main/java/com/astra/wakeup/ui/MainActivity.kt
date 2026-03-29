@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.Cursor
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -21,6 +22,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.astra.wakeup.AppUpgradeManager
 import com.astra.wakeup.AstraCrashReport
@@ -35,6 +37,49 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+    private var pendingScreenShareCheckbox: CheckBox? = null
+    private val screenSharePermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val checkbox = pendingScreenShareCheckbox
+        pendingScreenShareCheckbox = null
+        if (checkbox == null) return@registerForActivityResult
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            AstraScreenShareStore.saveProjectionPermission(result.resultCode, result.data)
+            AstraScreenShareStore.setOverlayCallScreenShareEnabled(this, true)
+            checkbox.setOnCheckedChangeListener(null)
+            checkbox.isChecked = true
+            checkbox.setOnCheckedChangeListener(overlayCallScreenShareCheckedChangeListener)
+            Toast.makeText(this, "Overlay call screen sharing enabled", Toast.LENGTH_SHORT).show()
+        } else {
+            AstraScreenShareStore.setOverlayCallScreenShareEnabled(this, false)
+            checkbox.setOnCheckedChangeListener(null)
+            checkbox.isChecked = false
+            checkbox.setOnCheckedChangeListener(overlayCallScreenShareCheckedChangeListener)
+            Toast.makeText(this, "Screen-share permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val overlayCallScreenShareCheckedChangeListener: android.widget.CompoundButton.OnCheckedChangeListener =
+        object : android.widget.CompoundButton.OnCheckedChangeListener {
+            override fun onCheckedChanged(buttonView: android.widget.CompoundButton?, isChecked: Boolean) {
+                if (buttonView == null) return
+                if (!isChecked) {
+                    AstraScreenShareStore.setOverlayCallScreenShareEnabled(this@MainActivity, false)
+                    Toast.makeText(this@MainActivity, "Overlay call screen sharing disabled", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                val manager = getSystemService(MediaProjectionManager::class.java)
+                if (manager == null) {
+                    Toast.makeText(this@MainActivity, "Screen capture service unavailable on this device", Toast.LENGTH_LONG).show()
+                    buttonView.setOnCheckedChangeListener(null)
+                    buttonView.isChecked = false
+                    buttonView.setOnCheckedChangeListener(this)
+                    return
+                }
+                pendingScreenShareCheckbox = buttonView as? CheckBox
+                screenSharePermissionLauncher.launch(manager.createScreenCaptureIntent())
+            }
+        }
+
     private fun currentVersionName(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
     private fun startNodeServiceSafely(onFailure: (() -> Unit)? = null) {
         // Bridge-first mode intentionally does not start the legacy direct-gateway node service.
@@ -166,6 +211,7 @@ class MainActivity : AppCompatActivity() {
         val cbPunish = findViewById<CheckBox>(R.id.cbPunish)
         val cbInterventionsEnabled = findViewById<CheckBox>(R.id.cbInterventionsEnabled)
         val cbOverlayEnabled = findViewById<CheckBox>(R.id.cbOverlayEnabled)
+        val cbOverlayCallScreenShare = findViewById<CheckBox>(R.id.cbOverlayCallScreenShare)
         val layoutGatewayAdvanced = findViewById<LinearLayout>(R.id.layoutGatewayAdvanced)
         val layoutGatewayDebug = findViewById<LinearLayout>(R.id.layoutGatewayDebug)
         val layoutWakeCard = findViewById<LinearLayout>(R.id.layoutWakeCard)
@@ -238,6 +284,7 @@ class MainActivity : AppCompatActivity() {
         cbPunish.isChecked = prefs.getBoolean("punish", true)
         cbInterventionsEnabled.isChecked = InterventionRepository(this).getState().enabled
         cbOverlayEnabled.isChecked = AstraOverlayController.isOverlayEnabled(this)
+        cbOverlayCallScreenShare.isChecked = AstraScreenShareStore.isOverlayCallScreenShareEnabled(this) && AstraScreenShareStore.hasProjectionPermission()
         cbAutoUpdate.isChecked = prefs.getBoolean("updater_auto_check", true)
         val skippedUpdateTagKey = "updater_skip_tag"
 
@@ -1177,6 +1224,8 @@ class MainActivity : AppCompatActivity() {
             }
             refreshSecondaryCards()
         }
+
+        cbOverlayCallScreenShare.setOnCheckedChangeListener(overlayCallScreenShareCheckedChangeListener)
 
         btnUsageAccess.setOnClickListener {
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
