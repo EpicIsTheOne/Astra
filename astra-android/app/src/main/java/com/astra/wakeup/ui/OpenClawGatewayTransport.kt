@@ -418,7 +418,6 @@ class OpenClawGatewayTransport(
             put("signature", signed.signature)
             put("signedAt", signed.signedAtMs)
             put("nonce", signed.nonce)
-            put("signatureVersion", signed.version.name)
         }
     }
 

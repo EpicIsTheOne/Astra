@@ -207,7 +207,6 @@ class OpenClawNodeService : Service() {
                 put("signature", it.signature)
                 put("signedAt", it.signedAtMs)
                 put("nonce", it.nonce)
-                put("signatureVersion", it.version.name)
             })
         }
 
