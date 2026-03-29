@@ -100,48 +100,57 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             callMode = !callMode
             if (callMode) {
                 val gatewayConfig = OpenClawGatewayConfig.fromContext(this)
-                val started = AstraCallSessionClient.startCall(gatewayConfig.httpBaseUrl)
-                if (!started.ok || started.session == null) {
-                    callMode = false
-                    val reason = started.error ?: "unknown error"
-                    val message = if (reason.contains("Gemini API key", ignoreCase = true)) {
-                        "Mission Control still isn't exposing your Gemini key to the live call backend yet. ${reason.trim()}"
-                    } else {
-                        "Couldn't start the live call session: $reason"
+                btnCall.isEnabled = false
+                setCallStatus("connecting…")
+                Thread {
+                    val started = AstraCallSessionClient.startCall(gatewayConfig.httpBaseUrl)
+                    runOnUiThread {
+                        btnCall.isEnabled = true
+                        if (!callMode) return@runOnUiThread
+                        if (!started.ok || started.session == null) {
+                            callMode = false
+                            btnCall.text = "Start Call"
+                            val reason = started.error ?: "unknown error"
+                            val message = if (reason.contains("Gemini API key", ignoreCase = true)) {
+                                "Mission Control still isn't exposing your Gemini key to the live call backend yet. ${reason.trim()}"
+                            } else {
+                                "Couldn't start the live call session: $reason"
+                            }
+                            appendMessage("Astra", message, isAstra = true)
+                            started.debug?.takeIf { it.isNotBlank() }?.let {
+                                appendMessage("Debug", it, isAstra = true)
+                            }
+                            setCallStatus("call failed")
+                            return@runOnUiThread
+                        }
+                        activeCallSessionId = started.session.id
+                        CallStateRepository.update { current ->
+                            current.copy(active = true, sessionId = started.session.id, phase = "connecting")
+                        }
+                        reconnectAttempts = 0
+                        connectLiveCallSocket(gatewayConfig.httpBaseUrl, started.session.id)
+                        btnCall.text = "End Call"
+                        setCallStatus("live 🎙️")
+                        appendMessage("Astra", "Call connected. Try not to mumble.", isAstra = true)
+                        speak("Call connected. Talk to me.")
+                        startService(Intent(this, CallForegroundService::class.java).apply {
+                            putExtra("call_session_id", started.session.id)
+                        })
+                        audioRecordStreamer?.stop()
+                        audioPlaybackQueue?.stop()
+                        audioPlaybackQueue = AudioPlaybackQueue(
+                            onError = { error -> runOnUiThread { appendMessage("Astra", "Playback issue: $error", isAstra = true) } }
+                        ).also { it.start() }
+                        audioRecordStreamer = AudioRecordStreamer(
+                            onChunk = { chunk ->
+                                val sessionId = activeCallSessionId ?: return@AudioRecordStreamer
+                                AstraCallSessionClient.sendAudioChunk(gatewayConfig.httpBaseUrl, sessionId, chunk)
+                            },
+                            onError = { error -> runOnUiThread { setCallStatus("audio issue") ; appendMessage("Astra", "Audio stream issue: $error", isAstra = true) } }
+                        ).also { it.start() }
+                        startSpeechInput(singleShot = false)
                     }
-                    appendMessage("Astra", message, isAstra = true)
-                    started.debug?.takeIf { it.isNotBlank() }?.let {
-                        appendMessage("Debug", it, isAstra = true)
-                    }
-                    setCallStatus("call failed")
-                    return@setOnClickListener
-                }
-                activeCallSessionId = started.session.id
-                CallStateRepository.update { current ->
-                    current.copy(active = true, sessionId = started.session.id, phase = "connecting")
-                }
-                reconnectAttempts = 0
-                connectLiveCallSocket(gatewayConfig.httpBaseUrl, started.session.id)
-                btnCall.text = "End Call"
-                setCallStatus("live 🎙️")
-                appendMessage("Astra", "Call connected. Try not to mumble.", isAstra = true)
-                speak("Call connected. Talk to me.")
-                startService(Intent(this, CallForegroundService::class.java).apply {
-                    putExtra("call_session_id", started.session.id)
-                })
-                audioRecordStreamer?.stop()
-                audioPlaybackQueue?.stop()
-                audioPlaybackQueue = AudioPlaybackQueue(
-                    onError = { error -> runOnUiThread { appendMessage("Astra", "Playback issue: $error", isAstra = true) } }
-                ).also { it.start() }
-                audioRecordStreamer = AudioRecordStreamer(
-                    onChunk = { chunk ->
-                        val sessionId = activeCallSessionId ?: return@AudioRecordStreamer
-                        AstraCallSessionClient.sendAudioChunk(gatewayConfig.httpBaseUrl, sessionId, chunk)
-                    },
-                    onError = { error -> runOnUiThread { setCallStatus("audio issue") ; appendMessage("Astra", "Audio stream issue: $error", isAstra = true) } }
-                ).also { it.start() }
-                startSpeechInput(singleShot = false)
+                }.start()
             } else {
                 btnCall.text = "Start Call"
                 pendingResumeAfterTts = false
