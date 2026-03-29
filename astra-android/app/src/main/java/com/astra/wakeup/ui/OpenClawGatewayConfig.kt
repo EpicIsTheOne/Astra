@@ -85,7 +85,7 @@ data class OpenClawGatewayConfig(
                 bootstrapToken = prefs.getString("gateway_bootstrap_token", null),
                 deviceToken = prefs.getString("gateway_device_token", null),
                 insecureLocalAuthAllowed = prefs.getBoolean("gateway_insecure_local_auth_allowed", false),
-                sessionKey = prefs.getString("gateway_session_key", "main") ?: "main"
+                sessionKey = prefs.getString("gateway_session_key", "orchestrator") ?: "orchestrator"
             )
         }
 
@@ -95,7 +95,7 @@ data class OpenClawGatewayConfig(
             bootstrapToken: String? = null,
             deviceToken: String? = null,
             insecureLocalAuthAllowed: Boolean = false,
-            sessionKey: String = "main"
+            sessionKey: String = "orchestrator"
         ): OpenClawGatewayConfig {
             val base = apiUrl.trim().trimEnd('/').ifBlank { DEFAULT_ASTRA_BASE_URL }
             val normalizedHttp = when {
@@ -117,7 +117,7 @@ data class OpenClawGatewayConfig(
                 bootstrapToken = bootstrapToken?.takeIf { it.isNotBlank() },
                 deviceToken = deviceToken?.takeIf { it.isNotBlank() },
                 insecureLocalAuthAllowed = insecureLocalAuthAllowed,
-                sessionKey = sessionKey.ifBlank { "main" }
+                sessionKey = sessionKey.ifBlank { "orchestrator" }
             )
         }
     }
@@ -148,7 +148,9 @@ object OpenClawGatewayAuthStore {
             }
 
         if (!prefs.contains("gateway_session_key")) {
-            prefs.edit().putString("gateway_session_key", "main").apply()
+            prefs.edit().putString("gateway_session_key", "orchestrator").apply()
+        } else if ((prefs.getString("gateway_session_key", "") ?: "").isBlank()) {
+            prefs.edit().putString("gateway_session_key", "orchestrator").apply()
         }
 
         migrateLegacyAuthState(prefs)
