@@ -142,10 +142,14 @@ class AstraOverlayService : Service() {
     private fun startOverlayForeground() {
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var serviceTypes = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            if (AstraScreenShareStore.isOverlayCallScreenShareEnabled(this) && AstraScreenShareStore.hasProjectionPermission()) {
+                serviceTypes = serviceTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            }
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                serviceTypes
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -366,6 +370,7 @@ class AstraOverlayService : Service() {
                     onDebug = { }
                 ).also { it.start() }
                 if (AstraScreenShareStore.isOverlayCallScreenShareEnabled(this) && AstraScreenShareStore.hasProjectionPermission()) {
+                    startOverlayForeground()
                     screenCaptureController?.stop()
                     screenCaptureController = OverlayScreenCaptureController(
                         context = this,
