@@ -776,7 +776,53 @@ class MainActivity : AppCompatActivity() {
             tvChatChip.text = "Chat state: locked"
 
             Thread {
-                val result = OpenClawChatClient().probe(this)
+                val chatClient = OpenClawChatClient()
+                var result = chatClient.probe(this)
+                val initialError = result.exceptionOrNull()?.message.orEmpty()
+                val initialIssue = OpenClawGatewayDiagnostics.classify(initialError)
+
+                if (result.isFailure && initialIssue?.code == "PAIRING_REQUIRED") {
+                    runOnUiThread {
+                        setConnectedState(false)
+                        refreshSecondaryCards()
+                        applyConnectionVisualState(
+                            title = "Waiting for approval",
+                            details = "OpenClaw is waiting for device approval. Once you approve it, Astra will retry automatically for a short window.",
+                            banner = "Approve this device in OpenClaw to finish pairing.",
+                            bannerBackground = "#7C2D12",
+                            bannerText = "#FFEDD5"
+                        )
+                        tvHealthChip.text = "Gateway status: awaiting approval"
+                        tvLineChip.text = "Connection state: waiting for approval"
+                        tvChatChip.text = "Chat state: locked"
+                        refreshGatewayDebug(initialError)
+                    }
+
+                    val retryDelaysMs = listOf(2000L, 3000L, 5000L, 7000L)
+                    for ((attemptIndex, delayMs) in retryDelaysMs.withIndex()) {
+                        Thread.sleep(delayMs)
+                        val retryConfig = OpenClawGatewayConfig.fromContext(this)
+                        result = chatClient.probe(this)
+                        if (result.isSuccess) break
+                        val retryError = result.exceptionOrNull()?.message.orEmpty()
+                        val retryIssue = OpenClawGatewayDiagnostics.classify(retryError)
+                        if (retryIssue?.code != "PAIRING_REQUIRED") break
+                        runOnUiThread {
+                            applyConnectionVisualState(
+                                title = "Waiting for approval",
+                                details = "Still waiting for OpenClaw approval. Retry ${attemptIndex + 1}/${retryDelaysMs.size} after ${delayMs / 1000}s.",
+                                banner = "Approve this device in OpenClaw to finish pairing.",
+                                bannerBackground = "#7C2D12",
+                                bannerText = "#FFEDD5"
+                            )
+                            tvHealthChip.text = "Gateway status: awaiting approval"
+                            tvLineChip.text = "Connection state: polling approval"
+                            tvChatChip.text = "Chat state: locked"
+                            refreshGatewayDebug(retryError)
+                        }
+                    }
+                }
+
                 runOnUiThread {
                     setConnectBusy(false)
                     result.onSuccess { session ->
@@ -826,19 +872,21 @@ class MainActivity : AppCompatActivity() {
                             title = when (issue?.code) {
                                 "AUTH_TOKEN_MISSING" -> "Gateway token missing"
                                 "AUTH_TOKEN_MISMATCH" -> "Gateway token mismatch"
+                                "PAIRING_REQUIRED" -> "Approval not seen yet"
                                 else -> "Connection failed"
                             },
                             details = OpenClawGatewayDiagnostics.describeStatus(this, msg),
                             banner = when (issue?.code) {
                                 "AUTH_TOKEN_MISSING" -> "Add the shared gateway token, then try again."
                                 "AUTH_TOKEN_MISMATCH" -> "The saved gateway token does not match OpenClaw."
+                                "PAIRING_REQUIRED" -> "Approval did not complete in time. Try Connect again right after approving."
                                 else -> "Check the URL or gateway token and try again."
                             },
                             bannerBackground = "#7F1D1D",
                             bannerText = "#FEE2E2"
                         )
                         tvHealthChip.text = "Gateway status: needs attention"
-                        tvLineChip.text = "Connection state: failed"
+                        tvLineChip.text = if (issue?.code == "PAIRING_REQUIRED") "Connection state: approval timed out" else "Connection state: failed"
                         tvChatChip.text = "Chat state: locked"
                         refreshGatewayDebug(msg)
                     }
