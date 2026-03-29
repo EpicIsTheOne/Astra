@@ -177,6 +177,19 @@
                 android:backgroundTint="#8B5CF6"
                 android:text="Listen"
                 android:textColor="#FFFFFF" />
+
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/btnOverlayCall"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:backgroundTint="#0F766E"
+                android:text="Call"
+                android:textColor="#FFFFFF" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

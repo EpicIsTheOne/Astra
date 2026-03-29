@@ -9,6 +9,7 @@ data class CallState(
     val lastUserText: String = "",
     val lastAssistantText: String = "",
     val lastTaskId: String? = null,
+    val callStartedAtMs: Long? = null,
 )
 
 object CallStateRepository {

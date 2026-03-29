@@ -10,7 +10,9 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -29,12 +31,31 @@ class AstraOverlayService : Service() {
     private var panelView: View? = null
     private var panelParams: WindowManager.LayoutParams? = null
     private var panelController: AstraOverlayPanelController? = null
+    private var callCompactView: View? = null
+    private var callCompactParams: WindowManager.LayoutParams? = null
+    private var tvCallCompactPhase: TextView? = null
+    private var tvCallCompactTimer: TextView? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var unsubscribeCallState: (() -> Unit)? = null
     private var lastOutsideTapAtMs: Long = 0L
+    private var lastCallCompactTapAtMs: Long = 0L
+    private var currentCallState: CallState = CallState()
+    private val callTimerTicker = object : Runnable {
+        override fun run() {
+            updateCompactCallUi(currentCallState)
+            if (currentCallState.active) {
+                handler.postDelayed(this, 1000L)
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         ensureChannel()
+        unsubscribeCallState = CallStateRepository.subscribe { state ->
+            handler.post { handleCallStateChanged(state) }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -49,19 +70,31 @@ class AstraOverlayService : Service() {
             }
             ACTION_EXPAND -> {
                 startOverlayForeground()
-                showPanelIfNeeded()
+                if (currentCallState.active) {
+                    showCompactCallUiIfNeeded()
+                } else {
+                    showPanelIfNeeded()
+                }
                 return START_STICKY
             }
             else -> {
                 startOverlayForeground()
-                showOrbIfNeeded()
+                if (currentCallState.active) {
+                    showCompactCallUiIfNeeded()
+                } else {
+                    showOrbIfNeeded()
+                }
                 return START_STICKY
             }
         }
     }
 
     override fun onDestroy() {
+        unsubscribeCallState?.invoke()
+        unsubscribeCallState = null
+        handler.removeCallbacks(callTimerTicker)
         removePanel()
+        removeCompactCallUi()
         removeOrb()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -107,6 +140,7 @@ class AstraOverlayService : Service() {
     }
 
     private fun showOrbIfNeeded() {
+        if (currentCallState.active) return
         if (orbView != null || !AstraOverlayController.isOverlayEnabled(this) || !AstraOverlayController.canDrawOverlays(this)) return
         val orb = FrameLayout(this).apply {
             setBackgroundResource(R.drawable.bg_astra_orb)
@@ -169,8 +203,13 @@ class AstraOverlayService : Service() {
     }
 
     private fun showPanelIfNeeded() {
+        if (currentCallState.active) {
+            showCompactCallUiIfNeeded()
+            return
+        }
         if (panelView != null || !AstraOverlayController.isOverlayEnabled(this) || !AstraOverlayController.canDrawOverlays(this)) return
         removeOrb()
+        removeCompactCallUi()
         lastOutsideTapAtMs = 0L
         val panel = LayoutInflater.from(this).inflate(R.layout.activity_astra_overlay, null)
         val panelCard = panel.findViewById<View>(R.id.overlayPanelCard)
@@ -199,6 +238,12 @@ class AstraOverlayService : Service() {
             },
             onCloseRequested = {
                 collapseToOrb()
+            },
+            onCallRequested = {
+                startActivity(Intent(this, ChatActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    putExtra(ChatActivity.EXTRA_AUTO_START_CALL, true)
+                })
             }
         )
         panelController?.onShow()
@@ -251,12 +296,101 @@ class AstraOverlayService : Service() {
         return !rect.contains(event.rawX.toInt(), event.rawY.toInt())
     }
 
+    private fun handleCallStateChanged(state: CallState) {
+        currentCallState = state
+        if (state.active) {
+            removePanel()
+            removeOrb()
+            showCompactCallUiIfNeeded()
+            updateCompactCallUi(state)
+            handler.removeCallbacks(callTimerTicker)
+            handler.post(callTimerTicker)
+        } else {
+            handler.removeCallbacks(callTimerTicker)
+            removeCompactCallUi()
+            if (AstraOverlayController.isOverlayEnabled(this) && AstraOverlayController.canDrawOverlays(this)) {
+                showOrbIfNeeded()
+            }
+        }
+    }
+
+    private fun showCompactCallUiIfNeeded() {
+        if (!currentCallState.active) return
+        if (callCompactView != null || !AstraOverlayController.isOverlayEnabled(this) || !AstraOverlayController.canDrawOverlays(this)) return
+        val view = LayoutInflater.from(this).inflate(R.layout.view_overlay_call_compact, null)
+        tvCallCompactPhase = view.findViewById(R.id.tvOverlayCallPhase)
+        tvCallCompactTimer = view.findViewById(R.id.tvOverlayCallTimer)
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.END
+            x = 24
+            y = 220
+        }
+        view.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_UP -> {
+                    val now = System.currentTimeMillis()
+                    if (now - lastCallCompactTapAtMs <= COMPACT_CALL_DOUBLE_TAP_WINDOW_MS) {
+                        lastCallCompactTapAtMs = 0L
+                        sendBroadcast(Intent(ChatActivity.ACTION_END_CALL))
+                    } else {
+                        lastCallCompactTapAtMs = now
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
+        runCatching { windowManager.addView(view, params) }
+        callCompactView = view
+        callCompactParams = params
+    }
+
+    private fun updateCompactCallUi(state: CallState) {
+        tvCallCompactPhase?.text = when {
+            state.phase.isBlank() -> "Call live"
+            state.phase.startsWith("Call:") -> state.phase.removePrefix("Call:").trim().replaceFirstChar { it.uppercase() }
+            else -> state.phase.replaceFirstChar { it.uppercase() }
+        }
+        val startedAt = state.callStartedAtMs
+        tvCallCompactTimer?.text = if (startedAt == null) {
+            "00:00"
+        } else {
+            formatElapsed(System.currentTimeMillis() - startedAt)
+        }
+    }
+
+    private fun formatElapsed(durationMs: Long): String {
+        val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
+        val hours = totalSeconds / 3600L
+        val minutes = (totalSeconds % 3600L) / 60L
+        val seconds = totalSeconds % 60L
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%02d:%02d", minutes, seconds)
+        }
+    }
+
     private fun removePanel() {
         panelController?.release()
         panelController = null
         panelView?.let { view -> runCatching { windowManager.removeView(view) } }
         panelView = null
         panelParams = null
+    }
+
+    private fun removeCompactCallUi() {
+        tvCallCompactPhase = null
+        tvCallCompactTimer = null
+        callCompactView?.let { view -> runCatching { windowManager.removeView(view) } }
+        callCompactView = null
+        callCompactParams = null
     }
 
     private fun removeOrb() {
@@ -280,5 +414,6 @@ class AstraOverlayService : Service() {
         private const val CHANNEL_ID = "astra_overlay"
         private const val NOTIFICATION_ID = 7110
         private const val OUTSIDE_DOUBLE_TAP_WINDOW_MS = 450L
+        private const val COMPACT_CALL_DOUBLE_TAP_WINDOW_MS = 450L
     }
 }

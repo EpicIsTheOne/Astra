@@ -29,7 +29,8 @@ class AstraOverlayPanelController(
     private val context: Context,
     private val root: View,
     private val requestMicPermission: (() -> Unit)? = null,
-    private val onCloseRequested: (() -> Unit)? = null
+    private val onCloseRequested: (() -> Unit)? = null,
+    private val onCallRequested: (() -> Unit)? = null,
 ) {
     private data class ConversationTurn(
         val speaker: String,
@@ -58,6 +59,7 @@ class AstraOverlayPanelController(
     private val etInput: EditText = root.findViewById(R.id.etOverlayInput)
     private val btnSend: Button = root.findViewById(R.id.btnOverlaySend)
     private val btnListen: Button = root.findViewById(R.id.btnOverlayListen)
+    private val btnCall: Button = root.findViewById(R.id.btnOverlayCall)
 
     private var recognizer: SpeechRecognizer? = null
     private var isListening = false
@@ -109,6 +111,11 @@ class AstraOverlayPanelController(
             startSpeechInput(force = true)
         }
         btnSend.setOnClickListener { submitTypedInput() }
+        btnCall.setOnClickListener {
+            interruptAstraSpeech()
+            shouldResumeAfterSpeech = false
+            onCallRequested?.invoke()
+        }
         etInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 submitTypedInput()
