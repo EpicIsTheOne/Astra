@@ -9,6 +9,7 @@ class AudioRecordStreamer(
     private val sampleRateHz: Int = 16_000,
     private val onChunk: (pcm16Base64: String) -> Unit,
     private val onError: (String) -> Unit,
+    private val onDebug: (String) -> Unit = {},
 ) {
     @Volatile
     private var running = false
@@ -26,6 +27,7 @@ class AudioRecordStreamer(
             onError("AudioRecord buffer init failed")
             return
         }
+        onDebug("AudioRecord minBuffer=$minBuffer sampleRate=$sampleRateHz")
         val audioRecord = AudioRecord(
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
             sampleRateHz,
@@ -36,14 +38,22 @@ class AudioRecordStreamer(
         recorder = audioRecord
         running = true
         thread = Thread {
+            var readCount = 0
             try {
                 audioRecord.startRecording()
+                onDebug("AudioRecord started state=${audioRecord.recordingState}")
                 val buffer = ByteArray(minBuffer)
                 while (running) {
                     val read = audioRecord.read(buffer, 0, buffer.size)
                     if (read > 0) {
+                        readCount += 1
+                        if (readCount <= 3 || readCount % 25 == 0) {
+                            onDebug("AudioRecord read #$readCount bytes=$read")
+                        }
                         val b64 = Base64.encodeToString(buffer.copyOf(read), Base64.NO_WRAP)
                         onChunk(b64)
+                    } else if (read < 0) {
+                        onDebug("AudioRecord read error code=$read")
                     }
                 }
             } catch (e: Throwable) {

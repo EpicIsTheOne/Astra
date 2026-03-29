@@ -111,9 +111,16 @@ object AstraCallSessionClient {
         runCatching { httpClient.newCall(request).execute().close() }
     }
 
-    fun sendAudioChunk(apiUrl: String, sessionId: String, pcm16Base64: String, mimeType: String = "audio/pcm;rate=16000") {
+    fun sendAudioChunk(
+        apiUrl: String,
+        sessionId: String,
+        pcm16Base64: String,
+        mimeType: String = "audio/pcm;rate=16000",
+    ): Result<String> {
         val base = commandCenterBase(apiUrl)
-        if (base.isBlank() || sessionId.isBlank() || pcm16Base64.isBlank()) return
+        if (base.isBlank() || sessionId.isBlank() || pcm16Base64.isBlank()) {
+            return Result.failure(IllegalArgumentException("Missing audio upload inputs"))
+        }
         val body = JSONObject().apply {
             put("pcm16Base64", pcm16Base64)
             put("mimeType", mimeType)
@@ -122,7 +129,15 @@ object AstraCallSessionClient {
             .url("$base/api/call/$sessionId/audio")
             .post(body.toString().toRequestBody(jsonMediaType))
             .build()
-        runCatching { httpClient.newCall(request).execute().close() }
+        return runCatching {
+            httpClient.newCall(request).execute().use { response ->
+                val text = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("HTTP ${response.code}: ${text.take(160)}")
+                }
+                text
+            }
+        }
     }
 
     fun endCall(apiUrl: String, sessionId: String) {

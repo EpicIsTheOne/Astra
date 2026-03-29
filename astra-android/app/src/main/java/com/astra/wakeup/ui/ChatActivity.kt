@@ -53,6 +53,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var audioPlaybackQueue: AudioPlaybackQueue? = null
     private var pendingVoiceFallbackText: String? = null
     private var receivedAudioForCurrentTurn = false
+    private var uplinkChunkDebugCount = 0
     private var typingDots = 0
     private val typingTicker = object : Runnable {
         override fun run() {
@@ -146,12 +147,25 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         audioPlaybackQueue = AudioPlaybackQueue(
                             onError = { error -> runOnUiThread { appendMessage("Astra", "Playback issue: $error", isAstra = true) } }
                         ).also { it.start() }
+                        uplinkChunkDebugCount = 0
                         audioRecordStreamer = AudioRecordStreamer(
                             onChunk = { chunk ->
-                                val sessionId = activeCallSessionId ?: return@AudioRecordStreamer
-                                AstraCallSessionClient.sendAudioChunk(gatewayConfig.httpBaseUrl, sessionId, chunk)
+                                val sessionId = activeCallSessionId
+                                if (sessionId.isNullOrBlank()) {
+                                    runOnUiThread { appendMessage("Debug", "Skipping audio upload because session id is missing.", isAstra = true) }
+                                    return@AudioRecordStreamer
+                                }
+                                uplinkChunkDebugCount += 1
+                                if (uplinkChunkDebugCount <= 3 || uplinkChunkDebugCount % 25 == 0) {
+                                    runOnUiThread { appendMessage("Debug", "Posting uplink chunk #$uplinkChunkDebugCount len=${chunk.length}", isAstra = true) }
+                                }
+                                val upload = AstraCallSessionClient.sendAudioChunk(gatewayConfig.httpBaseUrl, sessionId, chunk)
+                                upload.onFailure { err ->
+                                    runOnUiThread { appendMessage("Debug", "Audio upload failed #$uplinkChunkDebugCount: ${err.message}", isAstra = true) }
+                                }
                             },
-                            onError = { error -> runOnUiThread { setCallStatus("audio issue") ; appendMessage("Astra", "Audio stream issue: $error", isAstra = true) } }
+                            onError = { error -> runOnUiThread { setCallStatus("audio issue") ; appendMessage("Astra", "Audio stream issue: $error", isAstra = true) } },
+                            onDebug = { msg -> runOnUiThread { appendMessage("Debug", msg, isAstra = true) } },
                         ).also { it.start() }
                         appendMessage("Debug", "Live mode active: streaming mic directly to Gemini backend (SpeechRecognizer loop disabled).", isAstra = true)
                     }
