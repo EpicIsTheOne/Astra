@@ -501,13 +501,13 @@ class AstraOverlayService : Service() {
 
     private fun markAssistantPlaybackActive(active: Boolean) {
         assistantPlaybackActive = active
-        micGateUntilMs = if (active) System.currentTimeMillis() + 550L else System.currentTimeMillis() + 160L
+        micGateUntilMs = if (active) System.currentTimeMillis() + 120L else System.currentTimeMillis() + 80L
         if (!active) bargeInVoiceChunkStreak = 0
     }
 
     private fun shouldUploadMicChunk(pcm16: ByteArray): Boolean {
         if (!overlayOwnedCall) return false
-        if (!assistantPlaybackActive && System.currentTimeMillis() >= micGateUntilMs) return true
+        if (!assistantPlaybackActive) return true
         val rms = estimatePcm16Rms(pcm16)
         val allowBargeIn = rms >= 1800
         if (allowBargeIn) {

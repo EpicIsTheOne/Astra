@@ -488,17 +488,17 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun markAssistantPlaybackActive(active: Boolean) {
         assistantPlaybackActive = active
         if (active) {
-            micGateUntilMs = System.currentTimeMillis() + 550L
-            if (callMode) setCallStatus("speaking…")
+            micGateUntilMs = System.currentTimeMillis() + 120L
+            if (callMode) setCallStatus("live 🎙️")
         } else {
-            micGateUntilMs = System.currentTimeMillis() + 160L
+            micGateUntilMs = System.currentTimeMillis() + 80L
             bargeInVoiceChunkStreak = 0
         }
     }
 
     private fun shouldUploadMicChunk(pcm16: ByteArray): Boolean {
         if (!callMode) return false
-        if (!assistantPlaybackActive && System.currentTimeMillis() >= micGateUntilMs) return true
+        if (!assistantPlaybackActive) return true
         val rms = estimatePcm16Rms(pcm16)
         val allowBargeIn = rms >= 1800
         if (allowBargeIn) {
@@ -592,7 +592,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         pendingVoiceFallbackText = null
                         appendMessage("Astra", text, isAstra = true)
                         CallStateRepository.update { current -> current.copy(lastAssistantText = text) }
-                        setCallStatus("speaking…")
+                        setCallStatus("live 🎙️")
                         if (audioPlaybackQueue == null) {
                             speak(text)
                             if (callMode) pendingResumeAfterTts = true
@@ -611,7 +611,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         handler.removeCallbacks(voiceFallbackRunnable)
                         pendingResumeAfterTts = true
                         markAssistantPlaybackActive(true)
-                        setCallStatus("speaking…")
+                        setCallStatus("live 🎙️")
                         audioPlaybackQueue?.enqueuePcm16Base64(chunk, mimeType)
                     }
                 }
