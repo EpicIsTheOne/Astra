@@ -153,7 +153,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             },
                             onError = { error -> runOnUiThread { setCallStatus("audio issue") ; appendMessage("Astra", "Audio stream issue: $error", isAstra = true) } }
                         ).also { it.start() }
-                        startSpeechInput(singleShot = false)
+                        appendMessage("Debug", "Live mode active: streaming mic directly to Gemini backend (SpeechRecognizer loop disabled).", isAstra = true)
                     }
                 }.start()
             } else {
@@ -293,8 +293,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     "assistant.playback_finished"
                 )
             }
-            setCallStatus("listening…")
-            startSpeechInput(singleShot = false)
+            setCallStatus("live 🎙️")
         }
     }
 
