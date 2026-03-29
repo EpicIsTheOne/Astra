@@ -7,6 +7,10 @@ data class OpenClawChatResult(val reply: String? = null, val error: String? = nu
 class OpenClawChatClient(
     private val transport: OpenClawGatewayTransport = OpenClawGatewayTransport()
 ) {
+    private fun shouldUseBridge(config: OpenClawGatewayConfig): Boolean {
+        val status = OpenClawBridgeClient.status(config.httpBaseUrl)
+        return status.ok && status.connected
+    }
     private val staleDeviceTokenMarkers = listOf(
         "device token mismatch",
         "AUTH_DEVICE_TOKEN_MISMATCH"
@@ -22,6 +26,14 @@ class OpenClawChatClient(
     }
 
     fun chat(context: Context, config: OpenClawGatewayConfig, userText: String): OpenClawChatResult {
+        if (shouldUseBridge(config)) {
+            val queued = OpenClawBridgeClient.directChat(config.httpBaseUrl, userText, config.sessionKey)
+            return OpenClawChatResult(
+                reply = if (queued.ok) "Sent through Command Center bridge. Watch the activity feed for Astra's reply." else null,
+                error = queued.error
+            )
+        }
+
         val first = transport.sendChat(context, config, userText) { helloPayload ->
             OpenClawGatewayAuthStore.persistHelloAuth(context, helloPayload)
         }
@@ -60,6 +72,19 @@ class OpenClawChatClient(
 
     fun probe(context: Context): Result<OpenClawGatewaySession> {
         val config = OpenClawGatewayConfig.fromContext(context)
+        if (shouldUseBridge(config)) {
+            val status = OpenClawBridgeClient.status(config.httpBaseUrl)
+            return if (status.ok && status.connected) {
+                Result.success(OpenClawGatewaySession(3, org.json.JSONObject().apply {
+                    put("type", "hello-ok")
+                    put("protocol", 3)
+                    put("auth", org.json.JSONObject().put("mode", "bridge"))
+                    put("server", org.json.JSONObject().put("version", status.mode).put("connId", "commandcenter-bridge"))
+                }))
+            } else {
+                Result.failure(IllegalStateException(status.error ?: "Command Center bridge unavailable"))
+            }
+        }
         val first = transport.connect(context, config) { helloPayload ->
             OpenClawGatewayAuthStore.persistHelloAuth(context, helloPayload)
         }
