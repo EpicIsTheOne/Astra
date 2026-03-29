@@ -100,6 +100,9 @@ data class OpenClawGatewayConfig(
             val base = apiUrl.trim().trimEnd('/').ifBlank { DEFAULT_ASTRA_BASE_URL }
             val normalizedHttp = when {
                 base.isBlank() -> ""
+                base.contains("/commandcenter") -> base.substringBefore("/commandcenter")
+                base.contains("/missioncontrol") -> base.substringBefore("/missioncontrol")
+                base.contains("/aichat") -> base.substringBefore("/aichat")
                 base.endsWith("/api/astra") -> base.removeSuffix("/api/astra")
                 base.contains("/api/") -> base.substringBefore("/api/")
                 else -> base

@@ -30,6 +30,8 @@ object AstraCallSessionClient {
         return when {
             trimmed.isBlank() -> ""
             trimmed.contains("/commandcenter") -> trimmed.substringBefore("/commandcenter") + "/commandcenter"
+            trimmed.contains("/missioncontrol") -> trimmed.substringBefore("/missioncontrol") + "/commandcenter"
+            trimmed.contains("/aichat") -> trimmed.substringBefore("/aichat") + "/commandcenter"
             trimmed.contains("/api/") -> trimmed.substringBefore("/api/") + "/commandcenter"
             else -> "$trimmed/commandcenter"
         }
