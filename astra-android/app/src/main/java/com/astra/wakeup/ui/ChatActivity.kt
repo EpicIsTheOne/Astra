@@ -100,17 +100,16 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             callMode = !callMode
             if (callMode) {
                 val gatewayConfig = OpenClawGatewayConfig.fromContext(this)
-                val runtimeConfig = ApiGeminiClient.loadRuntimeConfig(gatewayConfig.httpBaseUrl)
-                if (!runtimeConfig.hasApiKey) {
-                    callMode = false
-                    appendMessage("Astra", "Connect your Gemini API key in Mission Control before starting live calls.", isAstra = true)
-                    setCallStatus("missing Gemini key")
-                    return@setOnClickListener
-                }
                 val started = AstraCallSessionClient.startCall(gatewayConfig.httpBaseUrl)
                 if (!started.ok || started.session == null) {
                     callMode = false
-                    appendMessage("Astra", "Couldn't start the live call session: ${started.error ?: "unknown error"}", isAstra = true)
+                    val reason = started.error ?: "unknown error"
+                    val message = if (reason.contains("Gemini API key", ignoreCase = true)) {
+                        "Mission Control still isn't exposing your Gemini key to the live call backend yet. ${reason.trim()}"
+                    } else {
+                        "Couldn't start the live call session: $reason"
+                    }
+                    appendMessage("Astra", message, isAstra = true)
                     setCallStatus("call failed")
                     return@setOnClickListener
                 }
