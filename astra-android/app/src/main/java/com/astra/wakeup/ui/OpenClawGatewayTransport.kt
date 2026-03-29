@@ -244,10 +244,28 @@ class OpenClawGatewayTransport(
                     "res" -> if (json.optString("id") == CONNECT_REQ_ID) {
                         if (json.optBoolean("ok")) {
                             val payload = json.optJSONObject("payload") ?: JSONObject()
+                            context?.let {
+                                OpenClawGatewayDiagnostics.recordHandshake(
+                                    context = it,
+                                    stage = "connect_hello_ok",
+                                    config = config,
+                                    helloPayload = payload
+                                )
+                            }
                             onHello?.invoke(payload)
                             resultRef.set(Result.success(OpenClawGatewaySession(payload.optInt("protocol", GATEWAY_PROTOCOL_VERSION), payload)))
                         } else {
-                            resultRef.set(Result.failure(IllegalStateException(errorMessage(json, "Gateway connect failed"))))
+                            val message = errorMessage(json, "Gateway connect failed")
+                            context?.let {
+                                OpenClawGatewayDiagnostics.recordHandshake(
+                                    context = it,
+                                    stage = "connect_res_error",
+                                    config = config,
+                                    error = message,
+                                    extra = JSONObject().put("frame", json.toString().take(600))
+                                )
+                            }
+                            resultRef.set(Result.failure(IllegalStateException(message)))
                         }
                         latch.countDown()
                     }
@@ -255,6 +273,15 @@ class OpenClawGatewayTransport(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                context?.let {
+                    OpenClawGatewayDiagnostics.recordHandshake(
+                        context = it,
+                        stage = "socket_failure",
+                        config = config,
+                        error = t.message ?: "Gateway connection failed",
+                        extra = JSONObject().put("responseCode", response?.code ?: -1)
+                    )
+                }
                 resultRef.compareAndSet(null, Result.failure(t))
                 latch.countDown()
             }
@@ -279,12 +306,42 @@ class OpenClawGatewayTransport(
         onError: (String) -> Unit
     ) {
         val nonce = challengePayload?.optString("nonce").orEmpty()
-        val frame = buildConnectFrame(context, config, nonce).getOrElse {
-            onError(it.message ?: "Failed to build connect frame")
+        val frame = buildConnectFrame(context, config, nonce).getOrElse { err ->
+            context?.let { appContext ->
+                OpenClawGatewayDiagnostics.recordHandshake(
+                    context = appContext,
+                    stage = "build_connect_failed",
+                    config = config,
+                    nonce = nonce,
+                    error = err.message ?: "Failed to build connect frame"
+                )
+            }
+            onError(err.message ?: "Failed to build connect frame")
             return
         }
+        context?.let {
+            OpenClawGatewayDiagnostics.recordHandshake(
+                context = it,
+                stage = "connect_frame_sent",
+                config = config,
+                nonce = nonce,
+                connectParams = frame.optJSONObject("params")
+            )
+        }
         val sent = webSocket.send(frame.toString())
-        if (!sent) onError("Failed to send connect frame")
+        if (!sent) {
+            context?.let {
+                OpenClawGatewayDiagnostics.recordHandshake(
+                    context = it,
+                    stage = "connect_frame_send_failed",
+                    config = config,
+                    nonce = nonce,
+                    connectParams = frame.optJSONObject("params"),
+                    error = "Failed to send connect frame"
+                )
+            }
+            onError("Failed to send connect frame")
+        }
     }
 
     private fun buildConnectFrame(context: Context?, config: OpenClawGatewayConfig, nonce: String): Result<JSONObject> {

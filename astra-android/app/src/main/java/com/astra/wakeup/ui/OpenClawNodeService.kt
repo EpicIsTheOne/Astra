@@ -124,6 +124,31 @@ class OpenClawNodeService : Service() {
                 "node.invoke.request" -> handleNodeInvokeRequest(json.optJSONObject("payload"))
                 "voicewake.changed" -> Unit
             }
+            "res" -> if (json.optString("id") == CONNECT_REQ_ID) {
+                if (json.optBoolean("ok")) {
+                    val payload = json.optJSONObject("payload") ?: JSONObject()
+                    OpenClawGatewayDiagnostics.recordHandshake(
+                        context = this,
+                        stage = "node_connect_hello_ok",
+                        config = OpenClawGatewayConfig.fromContext(this),
+                        helloPayload = payload
+                    )
+                    updateNotification("OpenClaw node connected")
+                } else {
+                    val message = json.optJSONObject("error")?.optString("message")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: json.optString("error").takeIf { it.isNotBlank() }
+                        ?: "Node connect failed"
+                    OpenClawGatewayDiagnostics.recordHandshake(
+                        context = this,
+                        stage = "node_connect_res_error",
+                        config = OpenClawGatewayConfig.fromContext(this),
+                        error = message,
+                        extra = JSONObject().put("frame", json.toString().take(600))
+                    )
+                    updateNotification("Node auth failed")
+                }
+            }
         }
     }
 
@@ -178,6 +203,14 @@ class OpenClawNodeService : Service() {
                 put("nonce", it.nonce)
             })
         }
+
+        OpenClawGatewayDiagnostics.recordHandshake(
+            context = this,
+            stage = "node_connect_frame_sent",
+            config = config,
+            nonce = nonce,
+            connectParams = params
+        )
 
         webSocket.send(JSONObject().apply {
             put("type", "req")

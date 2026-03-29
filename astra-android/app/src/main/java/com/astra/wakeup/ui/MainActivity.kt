@@ -493,6 +493,9 @@ class MainActivity : AppCompatActivity() {
                     append("auth: ")
                     append(summary)
                     append("\n")
+                    append("handshake: ")
+                    append(OpenClawGatewayDiagnostics.lastHandshakeDebug(this@MainActivity))
+                    append("\n")
                     append("deviceId=")
                     append(identity.optString("deviceId").ifBlank { "(missing)" })
                     append(" alg=")
@@ -517,24 +520,32 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        fun saveMainSettings() {
+        fun saveMainSettings(includeGatewayAuthInputs: Boolean = true) {
             val apiUrl = etApiUrl.text.toString().trim()
             val gatewayToken = etGatewayToken.text.toString().trim()
             val bootstrapToken = etBootstrapToken.text.toString().trim()
             val mediaCenterBaseUrl = etMediaCenterBaseUrl.text.toString().trim()
-            prefs.edit()
-                .putString("api_url", apiUrl)
-                .putString("gateway_token", gatewayToken)
-                .putString("gateway_bootstrap_token", bootstrapToken)
-                .putString("media_center_base_url", mediaCenterBaseUrl)
-                .putBoolean("punish", cbPunish.isChecked)
-                .putInt("wake_hour", wakeHour)
-                .putInt("wake_minute", wakeMinute)
-                .putInt("wake_voice_volume", voiceVolumeProgress)
-                .putInt("wake_music_volume", musicVolumeProgress)
-                .putInt("wake_sfx_volume", sfxVolumeProgress)
-                .putString("wake_default_plan", selectedWakePlanId)
-                .apply()
+            prefs.edit().apply {
+                putString("api_url", apiUrl)
+                if (includeGatewayAuthInputs) {
+                    putString("gateway_token", gatewayToken)
+                    putString("gateway_bootstrap_token", bootstrapToken)
+                }
+                putString("media_center_base_url", mediaCenterBaseUrl)
+                putBoolean("punish", cbPunish.isChecked)
+                putInt("wake_hour", wakeHour)
+                putInt("wake_minute", wakeMinute)
+                putInt("wake_voice_volume", voiceVolumeProgress)
+                putInt("wake_music_volume", musicVolumeProgress)
+                putInt("wake_sfx_volume", sfxVolumeProgress)
+                putString("wake_default_plan", selectedWakePlanId)
+            }.apply()
+        }
+
+        fun refreshGatewayAuthInputsFromPrefs() {
+            val refreshedPrefs = getSharedPreferences("astra", MODE_PRIVATE)
+            etGatewayToken.setText(refreshedPrefs.getString("gateway_token", "") ?: "")
+            etBootstrapToken.setText(refreshedPrefs.getString("gateway_bootstrap_token", "") ?: "")
         }
 
         fun refreshWakeMediaStatus() {
@@ -764,7 +775,8 @@ class MainActivity : AppCompatActivity() {
                         val server = session.helloPayload.optJSONObject("server")
                         val version = server?.optString("version").orEmpty().ifBlank { "unknown" }
                         val connId = server?.optString("connId").orEmpty().ifBlank { "?" }
-                        saveMainSettings()
+                        saveMainSettings(includeGatewayAuthInputs = false)
+                        refreshGatewayAuthInputsFromPrefs()
                         setConnectedState(true)
                         refreshSecondaryCards()
                         applyConnectionVisualState(

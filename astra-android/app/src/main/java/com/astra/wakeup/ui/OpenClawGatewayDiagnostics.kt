@@ -1,6 +1,7 @@
 package com.astra.wakeup.ui
 
 import android.content.Context
+import org.json.JSONObject
 
 data class GatewayAuthIssue(
     val code: String,
@@ -10,6 +11,8 @@ data class GatewayAuthIssue(
 )
 
 object OpenClawGatewayDiagnostics {
+    private const val PREF_LAST_HANDSHAKE_DEBUG = "gateway_last_handshake_debug"
+
     fun classify(error: String?): GatewayAuthIssue? {
         val message = error?.trim().orEmpty()
         if (message.isBlank()) return null
@@ -56,13 +59,91 @@ object OpenClawGatewayDiagnostics {
         }
     }
 
+    fun recordHandshake(
+        context: Context,
+        stage: String,
+        config: OpenClawGatewayConfig,
+        nonce: String? = null,
+        connectParams: JSONObject? = null,
+        helloPayload: JSONObject? = null,
+        error: String? = null,
+        extra: JSONObject? = null
+    ) {
+        val prefs = context.getSharedPreferences("astra", Context.MODE_PRIVATE)
+        val resolved = config.resolvedAuth()
+        val device = connectParams?.optJSONObject("device")
+        val auth = connectParams?.optJSONObject("auth")
+        val payload = JSONObject().apply {
+            put("stage", stage)
+            put("recordedAtMs", System.currentTimeMillis())
+            put("wsUrl", config.wsUrl)
+            put("authMode", resolved.mode.name)
+            put("hasGatewayToken", !config.gatewayToken.isNullOrBlank())
+            put("hasBootstrapToken", !config.bootstrapToken.isNullOrBlank())
+            put("hasDeviceToken", !config.deviceToken.isNullOrBlank())
+            put("noncePresent", !nonce.isNullOrBlank())
+            put("noncePreview", nonce?.take(16).orEmpty())
+            put("authPayload", auth?.let { JSONObject(it.toString()) } ?: JSONObject())
+            put("device", device?.let {
+                JSONObject().apply {
+                    put("id", it.optString("id"))
+                    put("publicKeyPreview", it.optString("publicKey").take(24))
+                    put("signaturePreview", it.optString("signature").take(24))
+                    put("signedAt", it.optLong("signedAt"))
+                    put("noncePreview", it.optString("nonce").take(16))
+                }
+            } ?: JSONObject())
+            put("helloAuth", helloPayload?.optJSONObject("auth")?.let { JSONObject(it.toString()) } ?: JSONObject())
+            put("server", helloPayload?.optJSONObject("server")?.let { JSONObject(it.toString()) } ?: JSONObject())
+            put("error", error.orEmpty())
+            put("extra", extra ?: JSONObject())
+        }
+        prefs.edit().putString(PREF_LAST_HANDSHAKE_DEBUG, payload.toString()).apply()
+    }
+
+    fun lastHandshakeDebug(context: Context): String {
+        val prefs = context.getSharedPreferences("astra", Context.MODE_PRIVATE)
+        val raw = prefs.getString(PREF_LAST_HANDSHAKE_DEBUG, null).orEmpty()
+        if (raw.isBlank()) return "-"
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return raw.take(280)
+        val device = json.optJSONObject("device")
+        val auth = json.optJSONObject("authPayload")
+        val helloAuth = json.optJSONObject("helloAuth")
+        return buildString {
+            append("stage=")
+            append(json.optString("stage").ifBlank { "?" })
+            append(" authMode=")
+            append(json.optString("authMode").ifBlank { "?" })
+            append(" nonce=")
+            append(if (json.optBoolean("noncePresent")) "yes" else "no")
+            auth?.let {
+                if (it.length() > 0) {
+                    append(" authKeys=")
+                    append(it.keys().asSequence().asIterable().joinToString(","))
+                }
+            }
+            device?.optString("id")?.takeIf { it.isNotBlank() }?.let {
+                append(" deviceId=")
+                append(it.take(16))
+            }
+            helloAuth?.optString("deviceToken")?.takeIf { it.isNotBlank() }?.let {
+                append(" helloDeviceToken=yes")
+            }
+            json.optString("error").takeIf { it.isNotBlank() }?.let {
+                append(" error=")
+                append(it.take(120))
+            }
+        }
+    }
+
     fun describeStatus(context: Context, chatError: String?): String {
         val auth = OpenClawGatewayAuthStore.authDebugSummary(context)
         val issue = classify(chatError)
+        val handshake = lastHandshakeDebug(context)
         return if (issue != null) {
-            "${issue.summary}; ${issue.guidance} [$auth]"
+            "${issue.summary}; ${issue.guidance} [$auth] [handshake=$handshake]"
         } else {
-            auth
+            "$auth [handshake=$handshake]"
         }
     }
 }
