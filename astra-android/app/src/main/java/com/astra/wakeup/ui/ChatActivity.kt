@@ -133,9 +133,12 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         setCallStatus("live 🎙️")
                         appendMessage("Astra", "Call connected. Try not to mumble.", isAstra = true)
                         speak("Call connected. Talk to me.")
-                        startService(Intent(this, CallForegroundService::class.java).apply {
-                            putExtra("call_session_id", started.session.id)
-                        })
+                        ContextCompat.startForegroundService(
+                            this,
+                            Intent(this, CallForegroundService::class.java).apply {
+                                putExtra("call_session_id", started.session.id)
+                            }
+                        )
                         audioRecordStreamer?.stop()
                         audioPlaybackQueue?.stop()
                         audioPlaybackQueue = AudioPlaybackQueue(
