@@ -787,8 +787,8 @@ class MainActivity : AppCompatActivity() {
                         refreshSecondaryCards()
                         applyConnectionVisualState(
                             title = "Waiting for approval",
-                            details = "OpenClaw is waiting for device approval. Once you approve it, Astra will retry automatically for a short window.",
-                            banner = "Approve this device in OpenClaw to finish pairing.",
+                            details = "OpenClaw is waiting for device approval. Astra will pause before retrying so it does not spam fresh pair codes while you're approving.",
+                            banner = "Approve this device in OpenClaw to finish pairing. Astra will retry shortly.",
                             bannerBackground = "#7C2D12",
                             bannerText = "#FFEDD5"
                         )
@@ -798,10 +798,9 @@ class MainActivity : AppCompatActivity() {
                         refreshGatewayDebug(initialError)
                     }
 
-                    val retryDelaysMs = listOf(2000L, 3000L, 5000L, 7000L)
+                    val retryDelaysMs = listOf(8000L, 12000L)
                     for ((attemptIndex, delayMs) in retryDelaysMs.withIndex()) {
                         Thread.sleep(delayMs)
-                        val retryConfig = OpenClawGatewayConfig.fromContext(this)
                         result = chatClient.probe(this)
                         if (result.isSuccess) break
                         val retryError = result.exceptionOrNull()?.message.orEmpty()
@@ -810,7 +809,7 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread {
                             applyConnectionVisualState(
                                 title = "Waiting for approval",
-                                details = "Still waiting for OpenClaw approval. Retry ${attemptIndex + 1}/${retryDelaysMs.size} after ${delayMs / 1000}s.",
+                                details = "Still waiting for OpenClaw approval. Astra is using slow retry ${attemptIndex + 1}/${retryDelaysMs.size} after ${delayMs / 1000}s so it does not replace the pending pair code too quickly.",
                                 banner = "Approve this device in OpenClaw to finish pairing.",
                                 bannerBackground = "#7C2D12",
                                 bannerText = "#FFEDD5"
