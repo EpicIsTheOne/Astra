@@ -19,6 +19,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.graphics.Rect
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
@@ -35,11 +38,24 @@ class AstraOverlayService : Service() {
     private var callCompactParams: WindowManager.LayoutParams? = null
     private var tvCallCompactPhase: TextView? = null
     private var tvCallCompactTimer: TextView? = null
+    private var btnCallCompactEnd: Button? = null
     private val handler = Handler(Looper.getMainLooper())
     private var unsubscribeCallState: (() -> Unit)? = null
     private var lastOutsideTapAtMs: Long = 0L
-    private var lastCallCompactTapAtMs: Long = 0L
     private var currentCallState: CallState = CallState()
+    private var overlayOwnedCall = false
+    private var activeCallSessionId: String? = null
+    private var liveCallSocket: AstraLiveCallSocket? = null
+    private var reconnectAttempts = 0
+    private val maxReconnectAttempts = 5
+    private var audioRecordStreamer: AudioRecordStreamer? = null
+    private var audioPlaybackQueue: AudioPlaybackQueue? = null
+    private var pendingVoiceFallbackText: String? = null
+    private var receivedAudioForCurrentTurn = false
+    private var assistantPlaybackActive = false
+    private var micGateUntilMs = 0L
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
     private val callTimerTicker = object : Runnable {
         override fun run() {
             updateCompactCallUi(currentCallState)
@@ -53,6 +69,22 @@ class AstraOverlayService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         ensureChannel()
+        tts = TextToSpeech(applicationContext) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            if (ttsReady) {
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        assistantPlaybackActive = true
+                    }
+                    override fun onError(utteranceId: String?) {
+                        handler.post { notifyAssistantPlaybackFinished() }
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        handler.post { notifyAssistantPlaybackFinished() }
+                    }
+                })
+            }
+        }
         unsubscribeCallState = CallStateRepository.subscribe { state ->
             handler.post { handleCallStateChanged(state) }
         }
@@ -93,9 +125,12 @@ class AstraOverlayService : Service() {
         unsubscribeCallState?.invoke()
         unsubscribeCallState = null
         handler.removeCallbacks(callTimerTicker)
+        endOverlayCall(announce = false, updateState = false)
         removePanel()
         removeCompactCallUi()
         removeOrb()
+        tts?.shutdown()
+        tts = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -240,10 +275,7 @@ class AstraOverlayService : Service() {
                 collapseToOrb()
             },
             onCallRequested = {
-                startActivity(Intent(this, ChatActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    putExtra(ChatActivity.EXTRA_AUTO_START_CALL, true)
-                })
+                startOverlayCall()
             }
         )
         panelController?.onShow()
@@ -296,6 +328,197 @@ class AstraOverlayService : Service() {
         return !rect.contains(event.rawX.toInt(), event.rawY.toInt())
     }
 
+    private fun startOverlayCall() {
+        if (overlayOwnedCall || currentCallState.active) return
+        val gatewayConfig = OpenClawGatewayConfig.fromContext(this)
+        overlayOwnedCall = true
+        updateOverlayCallState(active = true, phase = "connecting…")
+        Thread {
+            val started = AstraCallSessionClient.startCall(gatewayConfig.httpBaseUrl)
+            handler.post {
+                if (!started.ok || started.session == null) {
+                    overlayOwnedCall = false
+                    updateOverlayCallState(active = false, phase = "call failed")
+                    return@post
+                }
+                activeCallSessionId = started.session.id
+                reconnectAttempts = 0
+                connectOverlayLiveCallSocket(gatewayConfig.httpBaseUrl, started.session.id)
+                audioRecordStreamer?.stop()
+                audioPlaybackQueue?.stop()
+                audioPlaybackQueue = AudioPlaybackQueue(
+                    onError = { error -> handler.post { updateOverlayCallState(active = true, phase = "playback issue") } },
+                    onPlaybackStateChanged = { active -> handler.post { markAssistantPlaybackActive(active) } },
+                    onPlaybackIdle = { handler.post { notifyAssistantPlaybackFinished() } },
+                ).also { it.start() }
+                audioRecordStreamer = AudioRecordStreamer(
+                    shouldStreamChunk = { pcm16 -> shouldUploadMicChunk(pcm16) },
+                    onChunk = { chunk ->
+                        val sessionId = activeCallSessionId ?: return@AudioRecordStreamer
+                        AstraCallSessionClient.sendAudioChunk(gatewayConfig.httpBaseUrl, sessionId, chunk)
+                    },
+                    onError = { error -> handler.post { updateOverlayCallState(active = true, phase = "audio issue") } },
+                    onDebug = { }
+                ).also { it.start() }
+                updateOverlayCallState(active = true, sessionId = started.session.id, phase = "live 🎙️")
+                removePanel()
+                removeOrb()
+                showCompactCallUiIfNeeded()
+            }
+        }.start()
+    }
+
+    private fun endOverlayCall(announce: Boolean = false, updateState: Boolean = true) {
+        if (overlayOwnedCall) {
+            activeCallSessionId?.let { AstraCallSessionClient.endCall(OpenClawGatewayConfig.fromContext(this).httpBaseUrl, it) }
+        }
+        liveCallSocket?.close()
+        liveCallSocket = null
+        audioRecordStreamer?.stop()
+        audioRecordStreamer = null
+        audioPlaybackQueue?.stop()
+        audioPlaybackQueue = null
+        pendingVoiceFallbackText = null
+        receivedAudioForCurrentTurn = false
+        assistantPlaybackActive = false
+        micGateUntilMs = 0L
+        if (announce && ttsReady) {
+            tts?.speak("Call ended.", TextToSpeech.QUEUE_FLUSH, null, "overlay-call-ended")
+        }
+        activeCallSessionId = null
+        overlayOwnedCall = false
+        if (updateState) {
+            CallStateRepository.set(CallState())
+        }
+    }
+
+    private fun connectOverlayLiveCallSocket(apiUrl: String, sessionId: String) {
+        liveCallSocket?.close()
+        liveCallSocket = AstraLiveCallSocket(
+            apiUrl = apiUrl,
+            sessionId = sessionId,
+            onEvent = { type, data -> handler.post { handleOverlayLiveCallEvent(type, data) } },
+            onFailure = { error -> handler.post { scheduleOverlayReconnect(apiUrl, sessionId) } }
+        ).also { it.connect() }
+    }
+
+    private fun scheduleOverlayReconnect(apiUrl: String, sessionId: String) {
+        if (!overlayOwnedCall || activeCallSessionId != sessionId) return
+        reconnectAttempts += 1
+        if (reconnectAttempts > maxReconnectAttempts) {
+            endOverlayCall(updateState = true)
+            return
+        }
+        updateOverlayCallState(active = true, sessionId = sessionId, phase = "reconnecting…")
+        handler.postDelayed({
+            if (overlayOwnedCall && activeCallSessionId == sessionId) {
+                connectOverlayLiveCallSocket(apiUrl, sessionId)
+            }
+        }, (600L * reconnectAttempts).coerceAtMost(4000L))
+    }
+
+    private fun handleOverlayLiveCallEvent(type: String, data: org.json.JSONObject) {
+        reconnectAttempts = 0
+        when (type) {
+            "call:session.started" -> updateOverlayCallState(active = true, sessionId = data.optString("id").ifBlank { activeCallSessionId }, phase = "ready")
+            "call:session.state" -> updateOverlayCallState(active = true, sessionId = activeCallSessionId, phase = data.optString("state").ifBlank { "live" })
+            "call:transcript.partial" -> updateOverlayCallState(active = true, sessionId = activeCallSessionId, phase = "listening…")
+            "call:transcript.final" -> updateOverlayCallState(active = true, sessionId = activeCallSessionId, phase = "thinking…")
+            "call:response.text" -> {
+                val text = data.optString("text").trim()
+                if (text.isNotBlank()) {
+                    pendingVoiceFallbackText = text
+                    receivedAudioForCurrentTurn = false
+                    handler.removeCallbacks(voiceFallbackRunnable)
+                    handler.postDelayed(voiceFallbackRunnable, 2500L)
+                    CallStateRepository.update { current -> current.copy(lastAssistantText = text) }
+                    updateOverlayCallState(active = true, sessionId = activeCallSessionId, phase = "speaking…")
+                }
+            }
+            "call:response.audio" -> {
+                val chunk = data.optString("pcm16Base64").trim()
+                val mimeType = data.optString("mimeType").trim()
+                if (chunk.isNotBlank()) {
+                    receivedAudioForCurrentTurn = true
+                    pendingVoiceFallbackText = null
+                    handler.removeCallbacks(voiceFallbackRunnable)
+                    markAssistantPlaybackActive(true)
+                    audioPlaybackQueue?.enqueuePcm16Base64(chunk, mimeType)
+                    updateOverlayCallState(active = true, sessionId = activeCallSessionId, phase = "speaking…")
+                }
+            }
+            "call:error", "call:session.ended" -> endOverlayCall(updateState = true)
+        }
+    }
+
+    private val voiceFallbackRunnable = Runnable {
+        val fallback = pendingVoiceFallbackText
+        if (!overlayOwnedCall || fallback.isNullOrBlank() || receivedAudioForCurrentTurn || !ttsReady) return@Runnable
+        markAssistantPlaybackActive(true)
+        tts?.speak(fallback, TextToSpeech.QUEUE_FLUSH, null, "overlay-call-fallback")
+        pendingVoiceFallbackText = null
+    }
+
+    private fun notifyAssistantPlaybackFinished() {
+        markAssistantPlaybackActive(false)
+        val sessionId = activeCallSessionId ?: return
+        AstraCallSessionClient.sendSessionEvent(OpenClawGatewayConfig.fromContext(this).httpBaseUrl, sessionId, "assistant.playback_finished")
+        updateOverlayCallState(active = true, sessionId = sessionId, phase = "live 🎙️")
+    }
+
+    private fun markAssistantPlaybackActive(active: Boolean) {
+        assistantPlaybackActive = active
+        micGateUntilMs = if (active) System.currentTimeMillis() + 900L else System.currentTimeMillis() + 250L
+    }
+
+    private fun shouldUploadMicChunk(pcm16: ByteArray): Boolean {
+        if (!overlayOwnedCall) return false
+        if (!assistantPlaybackActive && System.currentTimeMillis() >= micGateUntilMs) return true
+        val rms = estimatePcm16Rms(pcm16)
+        val allowBargeIn = rms >= 2500
+        if (allowBargeIn) {
+            pendingVoiceFallbackText = null
+            receivedAudioForCurrentTurn = false
+            handler.removeCallbacks(voiceFallbackRunnable)
+            tts?.stop()
+            audioPlaybackQueue?.interruptPlayback()
+            markAssistantPlaybackActive(false)
+            updateOverlayCallState(active = true, sessionId = activeCallSessionId, phase = "listening…")
+            return true
+        }
+        return false
+    }
+
+    private fun estimatePcm16Rms(pcm16: ByteArray): Int {
+        if (pcm16.size < 2) return 0
+        var sum = 0.0
+        var count = 0
+        var i = 0
+        while (i + 1 < pcm16.size) {
+            val sample = ((pcm16[i + 1].toInt() shl 8) or (pcm16[i].toInt() and 0xFF)).toShort().toInt()
+            sum += sample * sample.toDouble()
+            count += 1
+            i += 2
+        }
+        if (count == 0) return 0
+        return kotlin.math.sqrt(sum / count).toInt()
+    }
+
+    private fun updateOverlayCallState(active: Boolean, sessionId: String? = activeCallSessionId, phase: String, startedAtMs: Long? = null) {
+        if (!active) {
+            CallStateRepository.set(CallState())
+            return
+        }
+        CallStateRepository.update { current ->
+            current.copy(
+                active = true,
+                sessionId = sessionId,
+                phase = phase,
+                callStartedAtMs = startedAtMs ?: current.callStartedAtMs ?: System.currentTimeMillis(),
+            )
+        }
+    }
+
     private fun handleCallStateChanged(state: CallState) {
         currentCallState = state
         if (state.active) {
@@ -320,6 +543,16 @@ class AstraOverlayService : Service() {
         val view = LayoutInflater.from(this).inflate(R.layout.view_overlay_call_compact, null)
         tvCallCompactPhase = view.findViewById(R.id.tvOverlayCallPhase)
         tvCallCompactTimer = view.findViewById(R.id.tvOverlayCallTimer)
+        btnCallCompactEnd = view.findViewById<Button>(R.id.btnOverlayCallEnd).apply {
+            setOnClickListener {
+                if (overlayOwnedCall) {
+                    endOverlayCall()
+                } else {
+                    sendBroadcast(Intent(ChatActivity.ACTION_END_CALL))
+                }
+            }
+        }
+        val anchor = orbParams
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -327,24 +560,9 @@ class AstraOverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = 24
-            y = 220
-        }
-        view.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_UP -> {
-                    val now = System.currentTimeMillis()
-                    if (now - lastCallCompactTapAtMs <= COMPACT_CALL_DOUBLE_TAP_WINDOW_MS) {
-                        lastCallCompactTapAtMs = 0L
-                        sendBroadcast(Intent(ChatActivity.ACTION_END_CALL))
-                    } else {
-                        lastCallCompactTapAtMs = now
-                    }
-                    true
-                }
-                else -> true
-            }
+            gravity = anchor?.gravity ?: (Gravity.TOP or Gravity.END)
+            x = anchor?.x ?: 24
+            y = anchor?.y ?: 220
         }
         runCatching { windowManager.addView(view, params) }
         callCompactView = view
@@ -388,6 +606,7 @@ class AstraOverlayService : Service() {
     private fun removeCompactCallUi() {
         tvCallCompactPhase = null
         tvCallCompactTimer = null
+        btnCallCompactEnd = null
         callCompactView?.let { view -> runCatching { windowManager.removeView(view) } }
         callCompactView = null
         callCompactParams = null
@@ -396,7 +615,6 @@ class AstraOverlayService : Service() {
     private fun removeOrb() {
         orbView?.let { view -> runCatching { windowManager.removeView(view) } }
         orbView = null
-        orbParams = null
     }
 
     private fun ensureChannel() {
