@@ -20,6 +20,17 @@ private const val ANDROID_GATEWAY_CLIENT_MODE = "ui"
 private const val ANDROID_GATEWAY_ROLE = "operator"
 private val ANDROID_GATEWAY_SCOPES = listOf("operator.read", "operator.write")
 
+fun gatewayGrantedScopes(helloPayload: JSONObject?): Set<String> {
+    if (helloPayload == null) return emptySet()
+    val auth = helloPayload.optJSONObject("auth") ?: return emptySet()
+    val scopes = auth.optJSONArray("scopes") ?: return emptySet()
+    return buildSet {
+        for (i in 0 until scopes.length()) {
+            scopes.optString(i).takeIf { it.isNotBlank() }?.let(::add)
+        }
+    }
+}
+
 data class OpenClawGatewaySession(
     val protocol: Int,
     val helloPayload: JSONObject

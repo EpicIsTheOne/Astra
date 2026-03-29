@@ -184,7 +184,11 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (result.error != null) {
                 ApiOpsClient.log(gatewayConfig.httpBaseUrl, "warn", "chatReply error: ${result.error}")
             }
-            val reply = result.reply ?: "Network tantrum: ${result.error ?: "unknown"}"
+            val reply = result.reply ?: if (result.error?.contains("missing scope: operator.write", ignoreCase = true) == true) {
+                "Network tantrum: this OpenClaw auth can connect, but it can't send chat yet because it lacks operator.write. Use a write-capable shared token or pair this device so Astra can get a device token."
+            } else {
+                "Network tantrum: ${result.error ?: "unknown"}"
+            }
             runOnUiThread {
                 stopTyping()
                 appendMessage("Astra", reply, isAstra = true)

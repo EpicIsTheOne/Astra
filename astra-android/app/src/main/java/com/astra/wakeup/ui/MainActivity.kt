@@ -581,6 +581,14 @@ class MainActivity : AppCompatActivity() {
 
         fun isConnectedState(): Boolean = prefs.getBoolean("gateway_connected", false)
 
+        fun hasStoredGatewayConfig(): Boolean {
+            val config = OpenClawGatewayConfig.fromContext(this)
+            return config.wsUrl.isNotBlank() && config.authMode() != GatewayAuthMode.NONE
+        }
+
+        fun shouldAutoConnectOnLaunch(): Boolean =
+            prefs.getBoolean("gateway_auto_connect", false) && hasStoredGatewayConfig()
+
         fun refreshSecondaryCards() {
             val connected = isConnectedState()
             val wakeAlpha = if (connected) 1.0f else 0.62f
@@ -775,23 +783,40 @@ class MainActivity : AppCompatActivity() {
                         val server = session.helloPayload.optJSONObject("server")
                         val version = server?.optString("version").orEmpty().ifBlank { "unknown" }
                         val connId = server?.optString("connId").orEmpty().ifBlank { "?" }
+                        val grantedScopes = gatewayGrantedScopes(session.helloPayload)
+                        val missingWriteScope = grantedScopes.isNotEmpty() && !grantedScopes.contains("operator.write")
                         saveMainSettings(includeGatewayAuthInputs = false)
                         refreshGatewayAuthInputsFromPrefs()
-                        setConnectedState(true)
+                        prefs.edit().putBoolean("gateway_auto_connect", true).apply()
+                        setConnectedState(!missingWriteScope)
                         refreshSecondaryCards()
-                        applyConnectionVisualState(
-                            title = "Phone connected",
-                            details = "Chat and wake controls are ready. serverVersion=$version, connId=$connId",
-                            banner = "Connected. Chat and wake controls are unlocked.",
-                            bannerBackground = "#14532D",
-                            bannerText = "#DCFCE7"
-                        )
-                        tvHealthChip.text = "Gateway status: reachable"
-                        tvLineChip.text = "Connection state: ready"
-                        tvChatChip.text = "Chat state: ready"
-                        startNodeServiceSafely()
-                        refreshWakeMediaStatus()
-                        refreshGatewayDebug()
+                        if (missingWriteScope) {
+                            applyConnectionVisualState(
+                                title = "Connected with limited permissions",
+                                details = "OpenClaw accepted the connection, but granted scopes=${grantedScopes.joinToString(",")}. Astra chat needs operator.write.",
+                                banner = "This auth can connect, but it can't send chat yet. Use a write-capable token or pair this device.",
+                                bannerBackground = "#7C2D12",
+                                bannerText = "#FFEDD5"
+                            )
+                            tvHealthChip.text = "Gateway status: reachable"
+                            tvLineChip.text = "Connection state: limited"
+                            tvChatChip.text = "Chat state: write scope missing"
+                            refreshGatewayDebug("missing scope: operator.write")
+                        } else {
+                            applyConnectionVisualState(
+                                title = "Phone connected",
+                                details = "Chat and wake controls are ready. serverVersion=$version, connId=$connId",
+                                banner = "Connected. Chat and wake controls are unlocked.",
+                                bannerBackground = "#14532D",
+                                bannerText = "#DCFCE7"
+                            )
+                            tvHealthChip.text = "Gateway status: reachable"
+                            tvLineChip.text = "Connection state: ready"
+                            tvChatChip.text = "Chat state: ready"
+                            startNodeServiceSafely()
+                            refreshWakeMediaStatus()
+                            refreshGatewayDebug()
+                        }
                     }.onFailure { err ->
                         val msg = err.message ?: "connect failed"
                         val issue = OpenClawGatewayDiagnostics.classify(msg)
@@ -853,6 +878,16 @@ class MainActivity : AppCompatActivity() {
                 refreshInterventionStatus()
                 Toast.makeText(this, "Disabled interventions after a startup failure", Toast.LENGTH_LONG).show()
             }
+        }
+        if (!isConnectedState() && shouldAutoConnectOnLaunch()) {
+            applyConnectionVisualState(
+                title = "Reconnecting this phone…",
+                details = "Astra found saved OpenClaw settings and is auto-connecting.",
+                banner = "Auto-connecting to OpenClaw…",
+                bannerBackground = "#1E293B",
+                bannerText = "#E2E8F0"
+            )
+            window.decorView.post { connectThisPhone() }
         }
         refreshUpdateVersionLine()
         refreshUpdateNotes()
@@ -969,6 +1004,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnClearGatewayAuth).setOnClickListener {
             OpenClawNodeService.stop(this)
             OpenClawGatewayAuthStore.clearAllGatewayAuth(this)
+            prefs.edit().putBoolean("gateway_auto_connect", false).apply()
             etGatewayToken.setText("")
             etBootstrapToken.setText("")
             setConnectedState(false)
