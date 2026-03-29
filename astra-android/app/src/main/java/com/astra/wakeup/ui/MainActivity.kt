@@ -59,8 +59,6 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("astra", MODE_PRIVATE)
         prefs.edit()
             .putBoolean("gateway_connected", false)
-            .remove("gateway_device_token")
-            .remove("gateway_device_token_issued_at")
             .remove("gateway_device_public_key_pem")
             .remove("gateway_device_private_key_pem")
             .remove("gateway_device_identity_created_at")
