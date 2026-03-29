@@ -14,16 +14,20 @@ class CallForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val sessionId = intent?.getStringExtra("call_session_id")?.takeIf { it.isNotBlank() }
+        val content = if (sessionId != null) "Session $sessionId is live" else "Listening for your voice…"
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Astra call active")
-            .setContentText("Listening for your voice…")
+            .setContentText(content)
             .setOngoing(true)
             .build()
         startForeground(NOTIF_ID, notification)
+        return START_STICKY
     }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun ensureChannel() {

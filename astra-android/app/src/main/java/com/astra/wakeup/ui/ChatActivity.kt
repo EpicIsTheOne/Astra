@@ -29,6 +29,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.astra.wakeup.R
+import org.json.JSONObject
 import java.util.Locale
 
 class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -44,6 +45,12 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var tvTyping: TextView
     private lateinit var chatScroll: ScrollView
     private var pendingResumeAfterTts = false
+    private var activeCallSessionId: String? = null
+    private var liveCallSocket: AstraLiveCallSocket? = null
+    private var reconnectAttempts = 0
+    private val maxReconnectAttempts = 5
+    private var audioRecordStreamer: AudioRecordStreamer? = null
+    private var audioPlaybackQueue: AudioPlaybackQueue? = null
     private var typingDots = 0
     private val typingTicker = object : Runnable {
         override fun run() {
@@ -92,19 +99,63 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         btnCall.setOnClickListener {
             callMode = !callMode
             if (callMode) {
+                val gatewayConfig = OpenClawGatewayConfig.fromContext(this)
+                val runtimeConfig = ApiGeminiClient.loadRuntimeConfig(gatewayConfig.httpBaseUrl)
+                if (!runtimeConfig.hasApiKey) {
+                    callMode = false
+                    appendMessage("Astra", "Connect your Gemini API key in Mission Control before starting live calls.", isAstra = true)
+                    setCallStatus("missing Gemini key")
+                    return@setOnClickListener
+                }
+                val started = AstraCallSessionClient.startCall(gatewayConfig.httpBaseUrl)
+                if (!started.ok || started.session == null) {
+                    callMode = false
+                    appendMessage("Astra", "Couldn't start the live call session: ${started.error ?: "unknown error"}", isAstra = true)
+                    setCallStatus("call failed")
+                    return@setOnClickListener
+                }
+                activeCallSessionId = started.session.id
+                CallStateRepository.update { current ->
+                    current.copy(active = true, sessionId = started.session.id, phase = "connecting")
+                }
+                reconnectAttempts = 0
+                connectLiveCallSocket(gatewayConfig.httpBaseUrl, started.session.id)
                 btnCall.text = "End Call"
                 setCallStatus("live 🎙️")
                 appendMessage("Astra", "Call connected. Try not to mumble.", isAstra = true)
                 speak("Call connected. Talk to me.")
-                startService(Intent(this, CallForegroundService::class.java))
+                startService(Intent(this, CallForegroundService::class.java).apply {
+                    putExtra("call_session_id", started.session.id)
+                })
+                audioRecordStreamer?.stop()
+                audioPlaybackQueue?.stop()
+                audioPlaybackQueue = AudioPlaybackQueue(
+                    onError = { error -> runOnUiThread { appendMessage("Astra", "Playback issue: $error", isAstra = true) } }
+                ).also { it.start() }
+                audioRecordStreamer = AudioRecordStreamer(
+                    onChunk = { chunk ->
+                        val sessionId = activeCallSessionId ?: return@AudioRecordStreamer
+                        AstraCallSessionClient.sendAudioChunk(gatewayConfig.httpBaseUrl, sessionId, chunk)
+                    },
+                    onError = { error -> runOnUiThread { setCallStatus("audio issue") ; appendMessage("Astra", "Audio stream issue: $error", isAstra = true) } }
+                ).also { it.start() }
                 startSpeechInput(singleShot = false)
             } else {
                 btnCall.text = "Start Call"
                 pendingResumeAfterTts = false
+                activeCallSessionId?.let { AstraCallSessionClient.endCall(OpenClawGatewayConfig.fromContext(this).httpBaseUrl, it) }
+                activeCallSessionId = null
+                liveCallSocket?.close()
+                liveCallSocket = null
+                audioRecordStreamer?.stop()
+                audioRecordStreamer = null
+                audioPlaybackQueue?.stop()
+                audioPlaybackQueue = null
                 setCallStatus("idle")
                 recognizer?.cancel()
                 stopTyping()
                 stopService(Intent(this, CallForegroundService::class.java))
+                CallStateRepository.set(CallState())
                 speak("Call ended.")
             }
         }
@@ -157,6 +208,13 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun setCallStatus(state: String) {
         tvCall.text = "Call: $state"
+        CallStateRepository.update { current ->
+            current.copy(
+                active = callMode,
+                sessionId = activeCallSessionId,
+                phase = state,
+            )
+        }
     }
 
     private fun startTyping() {
@@ -210,6 +268,13 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         runOnUiThread {
             if (!callMode || !pendingResumeAfterTts) return@runOnUiThread
             pendingResumeAfterTts = false
+            activeCallSessionId?.let {
+                AstraCallSessionClient.sendSessionEvent(
+                    OpenClawGatewayConfig.fromContext(this).httpBaseUrl,
+                    it,
+                    "assistant.playback_finished"
+                )
+            }
             setCallStatus("listening…")
             startSpeechInput(singleShot = false)
         }
@@ -241,14 +306,37 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     handler.postDelayed({ startSpeechInput(singleShot = false) }, 1000)
                 }
             }
-            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onPartialResults(partialResults: Bundle?) {
+                val heard = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty().trim()
+                if (!singleShot && callMode && heard.isNotBlank()) {
+                    activeCallSessionId?.let {
+                        AstraCallSessionClient.sendSessionEvent(
+                            OpenClawGatewayConfig.fromContext(this@ChatActivity).httpBaseUrl,
+                            it,
+                            "transcript.partial",
+                            heard,
+                        )
+                    }
+                }
+            }
             override fun onEvent(eventType: Int, params: Bundle?) {}
             override fun onResults(results: Bundle?) {
                 val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty().trim()
                 etInput.setText(heard)
                 if (heard.isNotBlank()) {
                     appendMessage("You", heard, isAstra = false)
-                    askAstra(heard, fromCall = !singleShot, remember = false)
+                    CallStateRepository.update { current -> current.copy(lastUserText = heard) }
+                    if (!singleShot && callMode && activeCallSessionId != null) {
+                        AstraCallSessionClient.sendSessionEvent(
+                            OpenClawGatewayConfig.fromContext(this@ChatActivity).httpBaseUrl,
+                            activeCallSessionId.orEmpty(),
+                            "transcript.final",
+                            heard,
+                        )
+                        setCallStatus("thinking…")
+                    } else {
+                        askAstra(heard, fromCall = !singleShot, remember = false)
+                    }
                 } else if (!singleShot && callMode) {
                     setCallStatus("listening…")
                     handler.postDelayed({ startSpeechInput(singleShot = false) }, 800)
@@ -264,9 +352,98 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         recognizer?.startListening(intent)
     }
 
+    private fun connectLiveCallSocket(apiUrl: String, sessionId: String) {
+        liveCallSocket?.close()
+        liveCallSocket = AstraLiveCallSocket(
+            apiUrl = apiUrl,
+            sessionId = sessionId,
+            onEvent = { type, data ->
+                reconnectAttempts = 0
+                handleLiveCallEvent(type, data)
+            },
+            onFailure = { error -> runOnUiThread { scheduleLiveSocketReconnect(apiUrl, sessionId, error) } }
+        ).also { it.connect() }
+    }
+
+    private fun scheduleLiveSocketReconnect(apiUrl: String, sessionId: String, reason: String) {
+        if (!callMode || activeCallSessionId != sessionId) return
+        reconnectAttempts += 1
+        if (reconnectAttempts > maxReconnectAttempts) {
+            setCallStatus("reconnect failed")
+            appendMessage("Astra", "Live call connection dropped and couldn't recover. End and restart the call.", isAstra = true)
+            return
+        }
+        val delayMs = (500L * reconnectAttempts).coerceAtMost(3000L)
+        setCallStatus("reconnecting…")
+        appendMessage("Astra", "Call link hiccup ($reason). Reconnecting…", isAstra = true)
+        handler.postDelayed({
+            if (!callMode || activeCallSessionId != sessionId) return@postDelayed
+            connectLiveCallSocket(apiUrl, sessionId)
+        }, delayMs)
+    }
+
+    private fun handleLiveCallEvent(type: String, data: JSONObject) {
+        runOnUiThread {
+            when (type) {
+                "call:session.started" -> setCallStatus("ready")
+                "call:session.state" -> setCallStatus(data.optString("state").ifBlank { "live" })
+                "call:transcript.partial" -> setCallStatus("listening…")
+                "call:transcript.final" -> setCallStatus("thinking…")
+                "call:response.text" -> {
+                    val text = data.optString("text").trim()
+                    if (text.isNotBlank()) {
+                        appendMessage("Astra", text, isAstra = true)
+                        CallStateRepository.update { current -> current.copy(lastAssistantText = text) }
+                        setCallStatus("speaking…")
+                        if (audioPlaybackQueue == null) {
+                            speak(text)
+                            if (callMode) pendingResumeAfterTts = true
+                        }
+                    }
+                }
+                "call:response.audio" -> {
+                    val chunk = data.optString("pcm16Base64").trim()
+                    val mimeType = data.optString("mimeType").trim()
+                    if (chunk.isNotBlank()) {
+                        setCallStatus("speaking…")
+                        audioPlaybackQueue?.enqueuePcm16Base64(chunk, mimeType)
+                    }
+                }
+                "call:session.ended" -> {
+                    callMode = false
+                    activeCallSessionId = null
+                    liveCallSocket?.close()
+                    liveCallSocket = null
+                    audioRecordStreamer?.stop()
+                    audioRecordStreamer = null
+                    audioPlaybackQueue?.stop()
+                    audioPlaybackQueue = null
+                    setCallStatus("ended")
+                    CallStateRepository.set(CallState())
+                }
+                "live_task:update" -> {
+                    val taskId = data.optString("id").ifBlank { null }
+                    val status = data.optString("status")
+                    val summary = data.optString("summary")
+                    CallStateRepository.update { current -> current.copy(lastTaskId = taskId ?: current.lastTaskId) }
+                    if (status == "completed" && summary.isNotBlank()) {
+                        appendMessage("Astra", "Background update: $summary", isAstra = true)
+                        CallStateRepository.update { current -> current.copy(lastAssistantText = summary) }
+                    } else if (status == "needs_input" && summary.isNotBlank()) {
+                        appendMessage("Astra", "I need your input to continue: $summary", isAstra = true)
+                        CallStateRepository.update { current -> current.copy(lastAssistantText = summary) }
+                    }
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         callMode = false
         stopTyping()
+        liveCallSocket?.close()
+        audioRecordStreamer?.stop()
+        audioPlaybackQueue?.stop()
         recognizer?.destroy()
         tts?.shutdown()
         stopService(Intent(this, CallForegroundService::class.java))

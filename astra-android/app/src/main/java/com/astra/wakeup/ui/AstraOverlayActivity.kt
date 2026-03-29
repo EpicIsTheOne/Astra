@@ -63,6 +63,7 @@ class AstraOverlayActivity : AppCompatActivity() {
     private var latestReplyExpanded = false
     private lateinit var btnSend: Button
     private lateinit var btnRetryListen: Button
+    private var unsubscribeCallState: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,6 +136,10 @@ class AstraOverlayActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         updateConnectionBanner()
+        unsubscribeCallState?.invoke()
+        unsubscribeCallState = CallStateRepository.subscribe { state ->
+            runOnUiThread { applySharedCallState(state) }
+        }
         handler.postDelayed({ startSpeechInput(force = true) }, 250)
     }
 
@@ -532,6 +537,21 @@ class AstraOverlayActivity : AppCompatActivity() {
         }
     }
 
+    private fun applySharedCallState(state: CallState) {
+        if (state.active) {
+            val status = buildString {
+                append("Shared call ${state.phase}")
+                if (!state.sessionId.isNullOrBlank()) append(" • ").append(state.sessionId?.takeLast(6))
+            }
+            tvStatus.text = status
+            if (state.lastAssistantText.isNotBlank()) {
+                tvLatestReply.text = state.lastAssistantText
+                tvLatestReply.visibility = View.VISIBLE
+                applyLatestReplyExpansion()
+            }
+        }
+    }
+
     private fun hideKeyboard() {
         val imm = getSystemService(InputMethodManager::class.java)
         imm?.hideSoftInputFromWindow(etInput.windowToken, 0)
@@ -556,6 +576,8 @@ class AstraOverlayActivity : AppCompatActivity() {
         isAstraSpeaking = false
         recognizer?.cancel()
         isListening = false
+        unsubscribeCallState?.invoke()
+        unsubscribeCallState = null
         super.onStop()
     }
 
