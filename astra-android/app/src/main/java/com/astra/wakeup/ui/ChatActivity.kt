@@ -51,6 +51,8 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val maxReconnectAttempts = 5
     private var audioRecordStreamer: AudioRecordStreamer? = null
     private var audioPlaybackQueue: AudioPlaybackQueue? = null
+    private var pendingVoiceFallbackText: String? = null
+    private var receivedAudioForCurrentTurn = false
     private var typingDots = 0
     private val typingTicker = object : Runnable {
         override fun run() {
@@ -165,6 +167,8 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 audioRecordStreamer = null
                 audioPlaybackQueue?.stop()
                 audioPlaybackQueue = null
+                pendingVoiceFallbackText = null
+                receivedAudioForCurrentTurn = false
                 setCallStatus("idle")
                 recognizer?.cancel()
                 stopTyping()
@@ -366,6 +370,19 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         recognizer?.startListening(intent)
     }
 
+    private fun scheduleVoiceFallbackIfNeeded(text: String) {
+        pendingVoiceFallbackText = text
+        receivedAudioForCurrentTurn = false
+        handler.postDelayed({
+            val fallback = pendingVoiceFallbackText
+            if (!callMode || fallback.isNullOrBlank() || receivedAudioForCurrentTurn) return@postDelayed
+            appendMessage("Debug", "No Gemini audio returned; using TTS fallback.", isAstra = true)
+            speak(fallback)
+            pendingResumeAfterTts = true
+            pendingVoiceFallbackText = null
+        }, 1500)
+    }
+
     private fun connectLiveCallSocket(apiUrl: String, sessionId: String) {
         liveCallSocket?.close()
         liveCallSocket = AstraLiveCallSocket(
@@ -412,6 +429,8 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         if (audioPlaybackQueue == null) {
                             speak(text)
                             if (callMode) pendingResumeAfterTts = true
+                        } else {
+                            scheduleVoiceFallbackIfNeeded(text)
                         }
                     }
                 }
@@ -419,8 +438,16 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     val chunk = data.optString("pcm16Base64").trim()
                     val mimeType = data.optString("mimeType").trim()
                     if (chunk.isNotBlank()) {
+                        receivedAudioForCurrentTurn = true
+                        pendingVoiceFallbackText = null
                         setCallStatus("speaking…")
                         audioPlaybackQueue?.enqueuePcm16Base64(chunk, mimeType)
+                    }
+                }
+                "call:debug" -> {
+                    val message = data.optString("message").trim()
+                    if (message.isNotBlank()) {
+                        appendMessage("Debug", message, isAstra = true)
                     }
                 }
                 "call:session.ended" -> {
@@ -432,6 +459,8 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     audioRecordStreamer = null
                     audioPlaybackQueue?.stop()
                     audioPlaybackQueue = null
+                    pendingVoiceFallbackText = null
+                    receivedAudioForCurrentTurn = false
                     setCallStatus("ended")
                     CallStateRepository.set(CallState())
                 }
