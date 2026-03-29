@@ -228,7 +228,7 @@ class ChatActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun appendDebugMessage(message: String) {
         if (!debugMessagesEnabled || message.isBlank()) return
-        appendDebugMessage(message)
+        appendMessage("Debug", message, isAstra = true)
     }
 
     private fun appendMessage(speaker: String, message: String, isAstra: Boolean) {
