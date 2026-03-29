@@ -177,6 +177,7 @@ class MainActivity : AppCompatActivity() {
         val tvConnectBanner = findViewById<TextView>(R.id.tvConnectBanner)
         val tvWakeHint = findViewById<TextView>(R.id.tvWakeHint)
         val tvChatHint = findViewById<TextView>(R.id.tvChatHint)
+        val tvOrbSize = findViewById<TextView>(R.id.tvOrbSize)
         val tvHealthChip = findViewById<TextView>(R.id.tvHealthChip)
         val tvLineChip = findViewById<TextView>(R.id.tvLineChip)
         val tvChatChip = findViewById<TextView>(R.id.tvChatChip)
@@ -198,6 +199,7 @@ class MainActivity : AppCompatActivity() {
         val btnOpenReminders = findViewById<Button>(R.id.btnOpenReminders)
         val btnRepairAppState = findViewById<Button>(R.id.btnRepairAppState)
         val btnPickWakeTime = findViewById<Button>(R.id.btnPickWakeTime)
+        val seekOrbSize = findViewById<SeekBar>(R.id.seekOrbSize)
         val seekVoiceVolume = findViewById<SeekBar>(R.id.seekVoiceVolume)
         val seekMusicVolume = findViewById<SeekBar>(R.id.seekMusicVolume)
         val seekSfxVolume = findViewById<SeekBar>(R.id.seekSfxVolume)
@@ -241,6 +243,7 @@ class MainActivity : AppCompatActivity() {
 
         var wakeHour = prefs.getInt("wake_hour", 5)
         var wakeMinute = prefs.getInt("wake_minute", 50)
+        var orbSizeProgress = AstraOverlayController.orbSizePercent(this)
         var voiceVolumeProgress = prefs.getInt("wake_voice_volume", 70)
         var musicVolumeProgress = prefs.getInt("wake_music_volume", 35)
         var sfxVolumeProgress = prefs.getInt("wake_sfx_volume", 90)
@@ -428,6 +431,12 @@ class MainActivity : AppCompatActivity() {
             seekSfxVolume.progress = sfxVolumeProgress
         }
 
+        fun updateOrbSizeUi() {
+            val orbDp = AstraOverlayController.orbSizeDp(this)
+            tvOrbSize.text = "Orb size: ${orbDp}dp"
+            seekOrbSize.progress = orbSizeProgress
+        }
+
         fun refreshWakePlanUi() {
             val profile = WakeProfiles.byId(selectedWakePlanId)
             tvWakePlan.text = "Wake plan: ${profile.title} — ${profile.description}"
@@ -606,6 +615,7 @@ class MainActivity : AppCompatActivity() {
             cbPunish.isEnabled = connected
             cbInterventionsEnabled.isEnabled = connected
             cbOverlayEnabled.isEnabled = true
+            seekOrbSize.isEnabled = true
             btnPickWakeTime.isEnabled = connected
             seekVoiceVolume.isEnabled = connected
             seekMusicVolume.isEnabled = connected
@@ -820,6 +830,7 @@ class MainActivity : AppCompatActivity() {
 
         updateWakeTimeUi()
         updateVolumeUi()
+        updateOrbSizeUi()
         refreshWakePlanUi()
         setAdvancedVisible(false)
         refreshGatewayDebug()
@@ -923,6 +934,23 @@ class MainActivity : AppCompatActivity() {
         seekVoiceVolume.setOnSeekBarChangeListener(volumeSliderListener)
         seekMusicVolume.setOnSeekBarChangeListener(volumeSliderListener)
         seekSfxVolume.setOnSeekBarChangeListener(volumeSliderListener)
+
+        seekOrbSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                orbSizeProgress = progress
+                AstraOverlayController.setOrbSizePercent(this@MainActivity, progress)
+                updateOrbSizeUi()
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                if (AstraOverlayController.isOverlayEnabled(this@MainActivity) && AstraOverlayController.canDrawOverlays(this@MainActivity)) {
+                    AstraOverlayController.stopOverlay(this@MainActivity)
+                    AstraOverlayController.startOverlay(this@MainActivity)
+                }
+            }
+        })
 
         btnCycleWakePlan.setOnClickListener {
             if (!isConnectedState()) {

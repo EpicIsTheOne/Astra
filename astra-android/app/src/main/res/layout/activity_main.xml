@@ -506,6 +506,22 @@
                 android:text="Enable Astra everywhere overlay + orb"
                 android:textColor="#E2E8F0" />
 
+            <TextView
+                android:id="@+id/tvOrbSize"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Orb size: 100%"
+                android:textColor="#CBD5E1"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/seekOrbSize"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50" />
+
             <Button
                 android:id="@+id/btnOpenReminders"
                 android:layout_width="match_parent"

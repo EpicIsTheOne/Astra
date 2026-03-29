@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat
 object AstraOverlayController {
     private const val PREFS_NAME = "astra"
     private const val PREF_OVERLAY_ENABLED = "overlay_enabled"
+    private const val PREF_ORB_SIZE_PERCENT = "overlay_orb_size_percent"
 
     fun canDrawOverlays(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -31,6 +32,23 @@ object AstraOverlayController {
         if (!enabled) {
             stopOverlay(context)
         }
+    }
+
+    fun orbSizePercent(context: Context): Int =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getInt(PREF_ORB_SIZE_PERCENT, 50)
+            .coerceIn(0, 100)
+
+    fun setOrbSizePercent(context: Context, percent: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(PREF_ORB_SIZE_PERCENT, percent.coerceIn(0, 100))
+            .apply()
+    }
+
+    fun orbSizeDp(context: Context): Int {
+        val percent = orbSizePercent(context)
+        return (48 + ((88 - 48) * (percent / 100f))).toInt()
     }
 
     fun overlayPermissionIntent(context: Context): Intent {

@@ -119,7 +119,7 @@ class AstraOverlayService : Service() {
                 gravity = Gravity.CENTER
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
-        val size = (64 * resources.displayMetrics.density).toInt()
+        val size = (AstraOverlayController.orbSizeDp(this) * resources.displayMetrics.density).toInt()
         val params = WindowManager.LayoutParams(
             size,
             size,
@@ -219,8 +219,20 @@ class AstraOverlayService : Service() {
     }
 
     private fun collapseToOrb() {
-        removePanel()
-        showOrbIfNeeded()
+        val panel = panelView
+        if (panel == null) {
+            removePanel()
+            showOrbIfNeeded()
+            return
+        }
+        panel.animate()
+            .alpha(0f)
+            .setDuration(180)
+            .withEndAction {
+                removePanel()
+                showOrbIfNeeded()
+            }
+            .start()
     }
 
     private fun handleOutsideTap() {
