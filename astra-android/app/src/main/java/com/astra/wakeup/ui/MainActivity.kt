@@ -33,6 +33,7 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     private fun currentVersionName(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
+    private val pairedLaunchSafeMode: Boolean = true
 
     private fun startNodeServiceSafely(onFailure: (() -> Unit)? = null) {
         runCatching { OpenClawNodeService.start(this) }
@@ -832,6 +833,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnConnectGateway.setOnClickListener {
+            if (pairedLaunchSafeMode && isConnectedState()) {
+                refreshGatewayDebug()
+            }
             connectThisPhone()
         }
 
