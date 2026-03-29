@@ -24,39 +24,50 @@ class OverlayScreenCaptureController(
     private var width = 0
     private var height = 0
     @Volatile private var running = false
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            stop()
+        }
+    }
 
     private val captureRunnable = object : Runnable {
         override fun run() {
             if (!running) return
             captureFrame()
-            workerHandler?.postDelayed(this, 2000L)
+            workerHandler?.postDelayed(this, 4000L)
         }
     }
 
     fun start(): Boolean {
         if (running) return true
         if (!AstraScreenShareStore.isOverlayCallScreenShareEnabled(context)) return false
-        projection = AstraScreenShareStore.createProjection(context) ?: return false
-        val metrics = context.resources.displayMetrics
-        val scale = (960f / maxOf(metrics.widthPixels, metrics.heightPixels).coerceAtLeast(1)).coerceAtMost(1f)
-        width = (metrics.widthPixels * scale).roundToInt().coerceAtLeast(360)
-        height = (metrics.heightPixels * scale).roundToInt().coerceAtLeast(640)
-        workerThread = HandlerThread("astra-overlay-screen-capture").also { it.start() }
-        workerHandler = Handler(workerThread!!.looper)
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-        virtualDisplay = projection?.createVirtualDisplay(
-            "astra-overlay-screen",
-            width,
-            height,
-            metrics.densityDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader?.surface,
-            null,
-            workerHandler,
-        )
-        running = true
-        workerHandler?.postDelayed(captureRunnable, 1200L)
-        return true
+        return runCatching {
+            projection = AstraScreenShareStore.createProjection(context) ?: return false
+            val metrics = context.resources.displayMetrics
+            val scale = (720f / maxOf(metrics.widthPixels, metrics.heightPixels).coerceAtLeast(1)).coerceAtMost(1f)
+            width = (metrics.widthPixels * scale).roundToInt().coerceAtLeast(360)
+            height = (metrics.heightPixels * scale).roundToInt().coerceAtLeast(640)
+            workerThread = HandlerThread("astra-overlay-screen-capture").also { it.start() }
+            workerHandler = Handler(workerThread!!.looper)
+            projection?.registerCallback(projectionCallback, workerHandler)
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            virtualDisplay = projection?.createVirtualDisplay(
+                "astra-overlay-screen",
+                width,
+                height,
+                metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface,
+                null,
+                workerHandler,
+            )
+            running = true
+            workerHandler?.postDelayed(captureRunnable, 1500L)
+            true
+        }.getOrElse {
+            stop()
+            false
+        }
     }
 
     fun stop() {
@@ -66,6 +77,7 @@ class OverlayScreenCaptureController(
         virtualDisplay = null
         imageReader?.close()
         imageReader = null
+        runCatching { projection?.unregisterCallback(projectionCallback) }
         projection?.stop()
         projection = null
         workerThread?.quitSafely()

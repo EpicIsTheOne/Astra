@@ -370,15 +370,26 @@ class AstraOverlayService : Service() {
                     onDebug = { }
                 ).also { it.start() }
                 if (AstraScreenShareStore.isOverlayCallScreenShareEnabled(this) && AstraScreenShareStore.hasProjectionPermission()) {
-                    startOverlayForeground()
-                    screenCaptureController?.stop()
-                    screenCaptureController = OverlayScreenCaptureController(
-                        context = this,
-                        onFrame = { jpegBase64 ->
-                            val sessionId = activeCallSessionId ?: return@OverlayScreenCaptureController
-                            AstraCallSessionClient.sendScreenFrame(gatewayConfig.httpBaseUrl, sessionId, jpegBase64)
+                    runCatching {
+                        startOverlayForeground()
+                        screenCaptureController?.stop()
+                        val controller = OverlayScreenCaptureController(
+                            context = this,
+                            onFrame = { jpegBase64 ->
+                                val sessionId = activeCallSessionId ?: return@OverlayScreenCaptureController
+                                AstraCallSessionClient.sendScreenFrame(gatewayConfig.httpBaseUrl, sessionId, jpegBase64)
+                            }
+                        )
+                        if (controller.start()) {
+                            screenCaptureController = controller
+                        } else {
+                            controller.stop()
+                            screenCaptureController = null
                         }
-                    ).also { it.start() }
+                    }.onFailure {
+                        screenCaptureController?.stop()
+                        screenCaptureController = null
+                    }
                 }
                 updateOverlayCallState(active = true, sessionId = started.session.id, phase = "live 🎙️")
                 removePanel()
