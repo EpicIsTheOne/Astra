@@ -7,8 +7,24 @@ const state = {
   agent: localStorage.getItem('astra.agent') || DEFAULT_AGENT,
   connected: false,
   latestRelease: null,
+  includePrereleases: localStorage.getItem('astra.includePrereleases') === 'true',
   currentVersion: APP_VERSION,
   appPlatform: 'unknown',
+  geminiConfig: null,
+  call: {
+    active: false,
+    status: 'idle',
+    sessionId: null,
+    socket: null,
+    mediaStream: null,
+    audioContext: null,
+    processor: null,
+    sourceNode: null,
+    assistantAudioQueue: [],
+    playing: false,
+    lastAssistantText: '',
+    lastUserText: ''
+  },
   chatMessages: [
     { role: 'assistant', text: "Desktop Astra online. Try not to embarrass yourself in front of the expensive UI." }
   ],
@@ -26,7 +42,8 @@ const state = {
     organizer: false,
     calendar: false,
     analytics: false,
-    updates: false
+    updates: false,
+    call: false
   }
 };
 
@@ -58,6 +75,10 @@ function wsUrl(baseUrl) {
   return cc + '/ws';
 }
 
+function callApiBase(baseUrl) {
+  return commandCenterBase(baseUrl);
+}
+
 async function getJson(url, init = {}) {
   const response = await fetch(url, {
     ...init,
@@ -82,6 +103,7 @@ function setBusy(key, value) {
 function saveSettings() {
   localStorage.setItem('astra.baseUrl', state.baseUrl);
   localStorage.setItem('astra.agent', state.agent);
+  localStorage.setItem('astra.includePrereleases', String(state.includePrereleases));
 }
 
 function setActiveView(view) {
@@ -159,14 +181,48 @@ function releaseWindowsAsset(release) {
   return assets.find((asset) => /Astra-Windows-.*x64\.exe$/i.test(asset.name || '')) || null;
 }
 
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function pcm16ToFloat32(pcm16ArrayBuffer) {
+  const source = new Int16Array(pcm16ArrayBuffer);
+  const out = new Float32Array(source.length);
+  for (let i = 0; i < source.length; i += 1) out[i] = Math.max(-1, Math.min(1, source[i] / 32768));
+  return out;
+}
+
+function floatTo16BitPCM(float32Array) {
+  const out = new Int16Array(float32Array.length);
+  for (let i = 0; i < float32Array.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, float32Array[i] || 0));
+    out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+  return out.buffer;
+}
+
 function updateStatusText() {
   if (!state.latestRelease) return 'No release details loaded yet.';
   const asset = releaseWindowsAsset(state.latestRelease);
   const newer = compareVersions(state.latestRelease.tag_name, state.currentVersion) > 0;
-  if (!asset) return 'Latest GitHub release exists, but no Windows installer asset was found.';
+  const channelLabel = state.includePrereleases ? 'stable + prerelease' : 'stable only';
+  if (!asset) return `Release channel ${channelLabel} found no Windows installer asset yet.`;
   return newer
-    ? `Update available: ${state.latestRelease.tag_name} is newer than ${state.currentVersion}.`
-    : `You are on ${state.currentVersion}. Latest Windows asset is ${state.latestRelease.tag_name}.`;
+    ? `Update available on ${channelLabel}: ${state.latestRelease.tag_name} is newer than ${state.currentVersion}.`
+    : `You are on ${state.currentVersion}. Latest ${channelLabel} Windows asset is ${state.latestRelease.tag_name}.`;
 }
 
 function reminderCount() {
@@ -424,15 +480,228 @@ async function checkForUpdates() {
   setBusy('updates', true);
   try {
     const releases = await getJson('https://api.github.com/repos/EpicIsTheOne/Astra/releases');
-    const windowsRelease = Array.isArray(releases)
-      ? releases.find((release) => releaseWindowsAsset(release)) || releases[0] || null
-      : null;
+    const candidates = Array.isArray(releases)
+      ? releases.filter((release) => state.includePrereleases || !release.prerelease)
+      : [];
+    const windowsRelease = candidates.find((release) => releaseWindowsAsset(release))
+      || (state.includePrereleases ? releases.find((release) => releaseWindowsAsset(release)) : null)
+      || candidates[0]
+      || null;
     state.latestRelease = windowsRelease;
   } catch (error) {
     toast(`Update check failed: ${error.message}`);
   } finally {
     setBusy('updates', false);
   }
+}
+
+async function loadGeminiConfig() {
+  try {
+    const json = await getJson(`${callApiBase(state.baseUrl)}/api/live/config`);
+    state.geminiConfig = json.config || json || null;
+  } catch (error) {
+    state.geminiConfig = { ok: false, error: error.message, model: 'gemini-3.1-flash-live-preview', transport: 'websocket-proxy-pending' };
+  }
+  render();
+}
+
+async function startCall() {
+  if (state.call.active || state.busy.call) return;
+  setBusy('call', true);
+  state.call.status = 'connecting…';
+  render();
+  try {
+    const started = await getJson(`${callApiBase(state.baseUrl)}/api/call/start`, {
+      method: 'POST',
+      body: JSON.stringify({ agent: state.agent })
+    });
+    const session = started.session;
+    if (!started.ok || !session?.id) throw new Error(started.error || 'call start failed');
+    state.call.active = true;
+    state.call.sessionId = session.id;
+    state.call.status = 'live 🎙️';
+    state.chatMessages.push({ role: 'assistant', text: 'Call connected. Talk to me.' });
+    speak('Call connected. Talk to me.');
+    connectCallSocket();
+    await startMicrophoneStreaming();
+  } catch (error) {
+    state.call.active = false;
+    state.call.sessionId = null;
+    state.call.status = 'call failed';
+    state.chatMessages.push({ role: 'assistant', text: `Couldn't start the live call session: ${error.message}` });
+  } finally {
+    setBusy('call', false);
+  }
+}
+
+async function endCall(announce = true) {
+  const sessionId = state.call.sessionId;
+  try {
+    if (sessionId) {
+      await getJson(`${callApiBase(state.baseUrl)}/api/call/${encodeURIComponent(sessionId)}/end`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+    }
+  } catch {}
+  teardownCallRuntime();
+  state.call.active = false;
+  state.call.sessionId = null;
+  state.call.status = 'idle';
+  if (announce) speak('Call ended.');
+  render();
+}
+
+function teardownCallRuntime() {
+  try { state.call.socket?.close(); } catch {}
+  state.call.socket = null;
+  try { state.call.processor?.disconnect(); } catch {}
+  try { state.call.sourceNode?.disconnect(); } catch {}
+  state.call.processor = null;
+  state.call.sourceNode = null;
+  if (state.call.mediaStream) {
+    state.call.mediaStream.getTracks().forEach((track) => track.stop());
+  }
+  state.call.mediaStream = null;
+  state.call.assistantAudioQueue = [];
+  state.call.playing = false;
+}
+
+function connectCallSocket() {
+  const socket = new WebSocket(wsUrl(state.baseUrl));
+  state.call.socket = socket;
+  socket.onmessage = (event) => {
+    let json;
+    try { json = JSON.parse(event.data); } catch { return; }
+    const type = json?.type || '';
+    const data = json?.data || {};
+    const eventSessionId = data.sessionId || data.id || '';
+    if (eventSessionId && eventSessionId !== state.call.sessionId) return;
+    if (!(type.startsWith('call:') || type === 'live_task:update')) return;
+    handleCallEvent(type, data);
+  };
+  socket.onclose = () => {
+    if (state.call.active) {
+      state.call.status = 'reconnecting…';
+      render();
+      setTimeout(() => {
+        if (state.call.active && state.call.sessionId) connectCallSocket();
+      }, 1000);
+    }
+  };
+}
+
+function handleCallEvent(type, data) {
+  switch (type) {
+    case 'call:session.started':
+      state.call.status = 'ready';
+      break;
+    case 'call:session.state':
+      state.call.status = data.state || 'live';
+      break;
+    case 'call:transcript.partial':
+      state.call.status = 'listening…';
+      break;
+    case 'call:transcript.final':
+      state.call.status = 'thinking…';
+      break;
+    case 'call:response.text': {
+      const text = String(data.text || '').trim();
+      if (text) {
+        state.call.lastAssistantText = text;
+        state.chatMessages.push({ role: 'assistant', text });
+      }
+      state.call.status = 'live 🎙️';
+      break;
+    }
+    case 'call:response.audio': {
+      const chunk = String(data.pcm16Base64 || '').trim();
+      if (chunk) enqueueAssistantAudio(chunk);
+      state.call.status = 'live 🎙️';
+      break;
+    }
+    case 'call:error': {
+      const message = String(data.message || 'Unknown live call error').trim();
+      state.chatMessages.push({ role: 'assistant', text: `Live call issue: ${message}` });
+      state.call.status = 'call issue';
+      break;
+    }
+    case 'call:session.ended':
+      teardownCallRuntime();
+      state.call.active = false;
+      state.call.sessionId = null;
+      state.call.status = 'ended';
+      break;
+    case 'live_task:update': {
+      const summary = String(data.summary || '').trim();
+      if (summary && ['completed', 'needs_input'].includes(data.status)) {
+        state.chatMessages.push({ role: 'assistant', text: data.status === 'needs_input' ? `I need your input to continue: ${summary}` : `Background update: ${summary}` });
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  render();
+}
+
+async function startMicrophoneStreaming() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    }
+  });
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  await audioContext.resume();
+  const source = audioContext.createMediaStreamSource(stream);
+  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+  processor.onaudioprocess = (event) => {
+    if (!state.call.active || !state.call.sessionId) return;
+    const input = event.inputBuffer.getChannelData(0);
+    const pcm16 = floatTo16BitPCM(input);
+    const pcm16Base64 = arrayBufferToBase64(pcm16);
+    fetch(`${callApiBase(state.baseUrl)}/api/call/${encodeURIComponent(state.call.sessionId)}/audio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ pcm16Base64, mimeType: 'audio/pcm;rate=16000' })
+    }).catch(() => null);
+  };
+  source.connect(processor);
+  processor.connect(audioContext.destination);
+  state.call.mediaStream = stream;
+  state.call.audioContext = audioContext;
+  state.call.sourceNode = source;
+  state.call.processor = processor;
+}
+
+function enqueueAssistantAudio(base64) {
+  state.call.assistantAudioQueue.push(base64);
+  if (!state.call.playing) playNextAssistantAudio();
+}
+
+function playNextAssistantAudio() {
+  const next = state.call.assistantAudioQueue.shift();
+  if (!next) {
+    state.call.playing = false;
+    return;
+  }
+  state.call.playing = true;
+  const ctx = state.call.audioContext || new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  state.call.audioContext = ctx;
+  const pcm = pcm16ToFloat32(base64ToArrayBuffer(next));
+  const buffer = ctx.createBuffer(1, pcm.length, 16000);
+  buffer.copyToChannel(pcm, 0);
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(ctx.destination);
+  src.onended = () => {
+    state.call.playing = false;
+    playNextAssistantAudio();
+  };
+  src.start();
 }
 
 function startVoiceInput() {
@@ -540,6 +809,12 @@ function renderSettingsCard() {
           <input data-agent value="${escapeHtml(state.agent)}" />
         </label>
       </div>
+      <div class="settings-toggle-row">
+        <label class="checkbox-row">
+          <input type="checkbox" data-include-prereleases ${state.includePrereleases ? 'checked' : ''} />
+          <span>Include prerelease updates for Windows</span>
+        </label>
+      </div>
       <div class="row actions-row">
         <button class="ghost" data-action="save-settings">Save settings</button>
         <button data-action="connect">${state.busy.connect ? 'Connecting…' : 'Connect now'}</button>
@@ -568,6 +843,7 @@ function renderNav() {
 }
 
 function renderChatView() {
+  const gemini = state.geminiConfig;
   return `
     <section class="glass-card view-card chat-view">
       <div class="section-head">
@@ -576,6 +852,17 @@ function renderChatView() {
           <h2>Astra chat</h2>
         </div>
         <div class="inline-status ${state.busy.chat ? 'busy' : 'ok'}">${state.busy.chat ? 'Thinking…' : 'Live'}</div>
+      </div>
+      <div class="call-strip">
+        <div>
+          <strong>Gemini call</strong>
+          <small>Call: ${escapeHtml(state.call.status)}${state.call.sessionId ? ` · ${escapeHtml(state.call.sessionId)}` : ''}</small>
+          <small>${gemini ? `Model ${escapeHtml(gemini.model || 'unknown')} · transport ${escapeHtml(gemini.transport || 'unknown')}` : 'Loading Gemini live config…'}</small>
+        </div>
+        <div class="row slim">
+          <button class="ghost" data-action="refresh-gemini">Refresh config</button>
+          <button data-action="call-toggle">${state.busy.call ? 'Working…' : state.call.active ? 'End Call' : 'Start Call'}</button>
+        </div>
       </div>
       <div class="chat-log">${state.chatMessages.map((message) => `<div class="msg ${message.role}"><span>${message.role === 'assistant' ? 'Astra' : 'You'}</span><p>${escapeHtml(message.text)}</p></div>`).join('')}</div>
       <div class="chat-compose">
@@ -747,10 +1034,12 @@ function renderApp() {
 }
 
 function bindEvents() {
-  root.querySelector('[data-action="save-settings"]')?.addEventListener('click', () => {
+  root.querySelector('[data-action="save-settings"]')?.addEventListener('click', async () => {
     state.baseUrl = root.querySelector('[data-base-url]').value.trim() || DEFAULT_BASE_URL;
     state.agent = root.querySelector('[data-agent]').value.trim() || DEFAULT_AGENT;
+    state.includePrereleases = Boolean(root.querySelector('[data-include-prereleases]')?.checked);
     saveSettings();
+    await checkForUpdates();
     toast('Settings saved');
   });
   root.querySelector('[data-action="connect"]')?.addEventListener('click', connectBridge);
@@ -769,6 +1058,8 @@ function bindEvents() {
     }
   });
   root.querySelector('[data-action="voice-input"]')?.addEventListener('click', startVoiceInput);
+  root.querySelector('[data-action="refresh-gemini"]')?.addEventListener('click', loadGeminiConfig);
+  root.querySelector('[data-action="call-toggle"]')?.addEventListener('click', () => (state.call.active ? endCall() : startCall()));
   root.querySelector('[data-action="open-panel"]')?.addEventListener('click', () => window.astraDesktop?.openPanel());
   root.querySelector('[data-action="check-updates"]')?.addEventListener('click', checkForUpdates);
   root.querySelector('[data-action="minimize-window"]')?.addEventListener('click', () => window.astraDesktop?.minimizeWindow());
@@ -846,7 +1137,8 @@ async function bootstrap() {
     loadOrganizer(),
     loadCalendar(),
     loadAnalytics(),
-    checkForUpdates()
+    checkForUpdates(),
+    loadGeminiConfig()
   ]);
 }
 

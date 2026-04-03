@@ -3,6 +3,7 @@
 Desktop client scaffold for Astra using the same backend model as Astra Android:
 
 - **Bridge-backed chat** via Command Center (`/commandcenter/api/chat/direct` + `/commandcenter/ws`)
+- **Gemini live call** via Command Center call endpoints + websocket events
 - **Shared memory** via `/api/astra/memory`
 - **Shared reminders + task board** via `/api/astra/organizer`
 - **Shared cron/calendar view** via `/api/astra/calendar`
@@ -44,6 +45,10 @@ You can change this in-app.
 ## Updater behavior
 The desktop app now reads its installed version from Electron at runtime and checks GitHub releases for a **Windows-specific** installer asset.
 It does not silently self-update yet; it surfaces the correct release page / download artifact for the user.
+
+The Windows client also has an in-app option to:
+- track **stable releases only**, or
+- include **prerelease** Windows builds in update checks
 
 ## Release process
 

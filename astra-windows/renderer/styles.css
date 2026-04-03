@@ -161,6 +161,20 @@ small, .muted { color: var(--muted); }
 .toolbar-grid { grid-template-columns: 1.3fr 0.6fr auto; }
 .triple-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 label { display: flex; flex-direction: column; gap: 8px; color: var(--soft); }
+.checkbox-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: var(--soft);
+}
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--pink);
+}
+.settings-toggle-row { margin-top: 14px; }
 .actions-row { margin-top: 14px; }
 .subtle-note { margin-top: 12px; color: var(--muted); font-size: 0.95rem; }
 .view-tabs {
@@ -177,6 +191,18 @@ label { display: flex; flex-direction: column; gap: 8px; color: var(--soft); }
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.9), rgba(236, 72, 153, 0.9));
 }
 .chat-view { min-height: 680px; display: flex; flex-direction: column; }
+.call-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  margin-bottom: 14px;
+  border-radius: 20px;
+  background: rgba(10, 15, 28, 0.82);
+  border: 1px solid rgba(30, 41, 59, 0.92);
+}
+.call-strip small { display: block; margin-top: 4px; }
 .chat-log {
   flex: 1;
   background: rgba(7, 11, 22, 0.72);
