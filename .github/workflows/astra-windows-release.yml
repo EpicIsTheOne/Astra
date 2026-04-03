@@ -1,6 +1,9 @@
 name: Release Astra Windows
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -28,8 +31,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     outputs:
+      release_tag: ${{ steps.version_meta.outputs.release_tag }}
       version_name: ${{ steps.version_meta.outputs.version_name }}
       release_title: ${{ steps.version_meta.outputs.release_title }}
+      prerelease_value: ${{ steps.version_meta.outputs.prerelease_value }}
     defaults:
       run:
         working-directory: astra-windows
@@ -53,17 +58,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION_NAME="${INPUT_TAG#v}"
+          RAW_TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          VERSION_NAME="${RAW_TAG#v}"
           if [ -n "${INPUT_NAME:-}" ]; then
             RELEASE_TITLE="$INPUT_NAME"
           else
             RELEASE_TITLE="Astra Windows v${VERSION_NAME}"
           fi
+          if [ "${IS_MANUAL}" = "true" ]; then
+            PRERELEASE_VALUE="${INPUT_PRERELEASE}"
+          else
+            PRERELEASE_VALUE="true"
+          fi
+          echo "release_tag=$RAW_TAG" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "release_title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
+          echo "prerelease_value=$PRERELEASE_VALUE" >> "$GITHUB_OUTPUT"
         env:
           INPUT_TAG: ${{ inputs.release_tag }}
           INPUT_NAME: ${{ inputs.release_name }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+          IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Set package version
         shell: bash
@@ -99,9 +114,9 @@ jobs:
       - name: Publish Windows GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.release_tag }}
+          tag_name: ${{ needs.build-windows-release.outputs.release_tag }}
           name: ${{ needs.build-windows-release.outputs.release_title }}
-          prerelease: ${{ inputs.prerelease }}
+          prerelease: ${{ needs.build-windows-release.outputs.prerelease_value }}
           generate_release_notes: true
           files: |
             dist/*.exe
