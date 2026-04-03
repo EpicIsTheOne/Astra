@@ -87,6 +87,9 @@ jobs:
 
       - name: Build Windows release packages
         run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Upload Windows release artifacts
         uses: actions/upload-artifact@v7
