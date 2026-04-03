@@ -41,17 +41,39 @@ object ApiStatusClient {
         if (apiUrl.isBlank()) return ApiSuiteStatus(false, "offline ❌", "No API URL", false, false, false)
 
         val (hOk, hMsg) = get(ApiEndpoints.health(apiUrl))
-        val chat = WakeChatClient.chatReplyDetailed(context, apiUrl, "ping")
-        val chatOk = !chat.reply.isNullOrBlank()
-        val lineOk = chatOk
 
-        val allOk = hOk && chatOk
+        val apiConfig = OpenClawGatewayConfig.fromPrefsApiUrl(apiUrl = apiUrl)
+        val baseConfig = OpenClawGatewayConfig.fromContext(context)
+        val config = baseConfig.copy(
+            httpBaseUrl = apiConfig.httpBaseUrl,
+            wsUrl = apiConfig.wsUrl
+        )
+
+        val transport = OpenClawGatewayTransport()
+        val lineProbe = transport.connect(context, config, timeoutMs = 12_000)
+        val lineOk = lineProbe.isSuccess
+        val lineError = lineProbe.exceptionOrNull()?.message
+
+        val history = if (lineOk) {
+            transport.fetchHistory(context, config, timeoutMs = 15_000)
+        } else {
+            GatewayHistoryResult(error = lineError ?: "Gateway connect failed")
+        }
+        val chatOk = lineOk && history.error.isNullOrBlank()
+
+        val lineDetail = if (lineOk) {
+            "ok"
+        } else {
+            OpenClawGatewayDiagnostics.describeStatus(context, lineError)
+        }
         val chatDetail = if (chatOk) {
             "ok"
         } else {
-            OpenClawGatewayDiagnostics.describeStatus(context, chat.error)
+            OpenClawGatewayDiagnostics.describeStatus(context, history.error)
         }
-        val details = "health=${if (hOk) "ok" else hMsg}, line=${if (lineOk) "ok" else "fail"}, chat=$chatDetail".take(240)
+
+        val allOk = hOk && lineOk && chatOk
+        val details = "health=${if (hOk) "ok" else hMsg}, line=$lineDetail, chat=$chatDetail".take(240)
         val summary = if (allOk) "connected ✅" else "partial/offline ❌"
         return ApiSuiteStatus(allOk, summary, details, hOk, lineOk, chatOk)
     }
