@@ -36,25 +36,27 @@
           "target": "nsis",
           "arch": [
             "x64"
-          ],
-          "artifactName": "Astra-Installer-${version}-${arch}.${ext}"
+          ]
         },
         {
           "target": "portable",
           "arch": [
             "x64"
-          ],
-          "artifactName": "Astra-Portable-${version}-${arch}.${ext}"
+          ]
         }
       ]
     },
     "nsis": {
+      "artifactName": "Astra-Installer-${version}-${arch}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
       "shortcutName": "Astra",
       "include": "build/installer.nsh"
+    },
+    "portable": {
+      "artifactName": "Astra-Portable-${version}-${arch}.${ext}"
     },
     "publish": {
       "provider": "github",
