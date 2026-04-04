@@ -12,12 +12,13 @@ const state = {
   appPlatform: 'unknown',
   updater: {
     phase: 'idle',
-    message: 'Updater idle',
+    message: 'Installer-based updates ready.',
     progressPercent: 0,
     downloadedVersion: null,
     availableVersion: null,
+    installerUrl: null,
     error: null,
-    autoApply: true
+    autoApply: false
   },
   geminiConfig: null,
   call: {
@@ -285,8 +286,7 @@ function parseSampleRateFromMimeType(mimeType) {
 function updateStatusText() {
   const channelLabel = state.includePrereleases ? 'stable + prerelease' : 'stable only';
   if (state.updater.phase === 'checking') return `Checking ${channelLabel} for updates…`;
-  if (state.updater.phase === 'downloading') return state.updater.message || 'Downloading update…';
-  if (state.updater.phase === 'downloaded') return state.updater.message || 'Update downloaded. Restarting to apply…';
+  if (state.updater.phase === 'available') return state.updater.message || 'Update available. Open the installer to apply it.';
   if (state.updater.phase === 'error') return state.updater.message || 'Updater error.';
   if (!state.latestRelease) return 'No release details loaded yet.';
   const asset = releaseWindowsAsset(state.latestRelease);
@@ -562,10 +562,21 @@ async function refreshReleaseMetadata() {
 
 async function checkForUpdates() {
   setBusy('updates', true);
+  state.updater = { ...state.updater, phase: 'checking', message: 'Checking for updates…', error: null };
+  render();
   try {
-    await window.astraDesktop?.updaterConfig?.({ allowPrerelease: state.includePrereleases, autoApply: state.updater.autoApply });
+    await window.astraDesktop?.updaterConfig?.({ allowPrerelease: state.includePrereleases, autoApply: false });
     await refreshReleaseMetadata();
-    const result = await window.astraDesktop?.updaterCheck?.();
+    const releaseAsset = releaseWindowsAsset(state.latestRelease);
+    const availableVersion = state.latestRelease?.tag_name || null;
+    const updateAvailable = Boolean(releaseAsset && compareVersions(availableVersion, state.currentVersion) > 0);
+    const result = await window.astraDesktop?.updaterCheck?.({
+      updateAvailable,
+      installerUrl: releaseAsset?.browser_download_url || null,
+      availableVersion,
+      currentVersion: state.currentVersion,
+      release: state.latestRelease || null
+    });
     if (result?.state) state.updater = { ...state.updater, ...result.state };
   } catch (error) {
     state.updater = { ...state.updater, phase: 'error', message: `Updater error: ${error.message}`, error: error.message };
@@ -918,20 +929,16 @@ function renderSettingsCard() {
           <input type="checkbox" data-include-prereleases ${state.includePrereleases ? 'checked' : ''} />
           <span>Include prerelease updates for Windows</span>
         </label>
-        <label class="checkbox-row">
-          <input type="checkbox" data-auto-apply-updates ${state.updater.autoApply ? 'checked' : ''} />
-          <span>Automatically apply downloaded updates on Windows</span>
-        </label>
       </div>
       <div class="row actions-row">
         <button class="ghost" data-action="save-settings">Save settings</button>
         <button data-action="connect">${state.busy.connect ? 'Connecting…' : 'Connect now'}</button>
         ${state.latestRelease?.html_url ? `<button class="ghost" data-open-url="${state.latestRelease.html_url}">Open release page</button>` : ''}
-        ${releaseAsset?.browser_download_url ? `<button class="ghost" data-open-url="${releaseAsset.browser_download_url}">Download Windows build</button>` : ''}
+        ${releaseAsset?.browser_download_url ? `<button class="ghost" data-open-url="${releaseAsset.browser_download_url}">${compareVersions(state.latestRelease?.tag_name, state.currentVersion) > 0 ? 'Open latest installer' : 'Download Windows installer'}</button>` : ''}
       </div>
       <div class="subtle-note">Backend target: ${escapeHtml(commandCenterBase(state.baseUrl))}</div>
       <div class="subtle-note">Installed ${escapeHtml(state.currentVersion)} on ${escapeHtml(state.appPlatform)}. ${escapeHtml(updateStatusText())}</div>
-      <div class="subtle-note">Updater: ${escapeHtml(state.updater.message || 'idle')}${state.updater.progressPercent ? ` (${Math.round(state.updater.progressPercent)}%)` : ''}</div>
+      <div class="subtle-note">Installer updater: ${escapeHtml(state.updater.message || 'idle')}</div>
     </section>
   `;
 }
@@ -1147,7 +1154,7 @@ function bindEvents() {
     state.baseUrl = root.querySelector('[data-base-url]').value.trim() || DEFAULT_BASE_URL;
     state.agent = root.querySelector('[data-agent]').value.trim() || DEFAULT_AGENT;
     state.includePrereleases = Boolean(root.querySelector('[data-include-prereleases]')?.checked);
-    state.updater.autoApply = Boolean(root.querySelector('[data-auto-apply-updates]')?.checked);
+    state.updater.autoApply = false;
     saveSettings();
     await checkForUpdates();
     toast('Settings saved');

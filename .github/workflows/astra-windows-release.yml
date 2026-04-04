@@ -18,7 +18,7 @@ on:
         description: 'Publish as prerelease'
         required: true
         type: boolean
-        default: true
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -68,7 +68,7 @@ jobs:
           if [ "${IS_MANUAL}" = "true" ]; then
             PRERELEASE_VALUE="${INPUT_PRERELEASE}"
           else
-            PRERELEASE_VALUE="true"
+            PRERELEASE_VALUE="false"
           fi
           echo "release_tag=$RAW_TAG" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"

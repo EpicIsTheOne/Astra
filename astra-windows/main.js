@@ -1,9 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import updaterPkg from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-const { autoUpdater } = updaterPkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,15 +9,15 @@ let mainWindow;
 let panelWindow;
 let updaterState = {
   phase: 'idle',
-  message: 'Updater idle',
+  message: 'Installer-based updates ready.',
   progressPercent: 0,
   downloadedVersion: null,
   availableVersion: null,
   allowPrerelease: false,
   error: null,
-  updateInfo: null
+  updateInfo: null,
+  installerUrl: null
 };
-let installAfterDownload = true;
 
 function sendUpdaterState() {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -33,68 +30,16 @@ function setUpdaterState(patch) {
   sendUpdaterState();
 }
 
-function configureAutoUpdater() {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.disableWebInstaller = false;
-  autoUpdater.allowDowngrade = false;
-
-  autoUpdater.on('checking-for-update', () => {
-    setUpdaterState({ phase: 'checking', message: 'Checking for updates…', progressPercent: 0, error: null });
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    setUpdaterState({
-      phase: 'downloading',
-      message: `Downloading ${info.version}…`,
-      availableVersion: info.version || null,
-      updateInfo: info,
-      error: null
-    });
-  });
-
-  autoUpdater.on('update-not-available', (info) => {
-    setUpdaterState({
-      phase: 'idle',
-      message: `Already up to date${info?.version ? ` (${info.version})` : ''}.`,
-      availableVersion: info?.version || null,
-      progressPercent: 100,
-      updateInfo: info || null,
-      error: null
-    });
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    setUpdaterState({
-      phase: 'downloading',
-      message: `Downloading update… ${Math.round(progress.percent || 0)}%`,
-      progressPercent: Number(progress.percent || 0),
-      error: null
-    });
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    setUpdaterState({
-      phase: 'downloaded',
-      message: `Update ${info.version} downloaded. Restarting to apply…`,
-      downloadedVersion: info.version || null,
-      progressPercent: 100,
-      updateInfo: info,
-      error: null
-    });
-    if (installAfterDownload) {
-      setTimeout(() => {
-        autoUpdater.quitAndInstall(false, true);
-      }, 1800);
-    }
-  });
-
-  autoUpdater.on('error', (error) => {
-    setUpdaterState({
-      phase: 'error',
-      message: `Updater error: ${error?.message || 'unknown error'}`,
-      error: error?.message || 'unknown error'
-    });
+function configureUpdaterBridge() {
+  setUpdaterState({
+    phase: 'idle',
+    message: 'Installer-based updates ready.',
+    progressPercent: 0,
+    downloadedVersion: null,
+    availableVersion: null,
+    error: null,
+    updateInfo: null,
+    installerUrl: null
   });
 }
 
@@ -146,7 +91,7 @@ function createPanelWindow() {
 }
 
 app.whenReady().then(() => {
-  configureAutoUpdater();
+  configureUpdaterBridge();
   createMainWindow();
 
   app.on('activate', () => {
@@ -187,20 +132,38 @@ ipcMain.handle('astra:app-info', () => ({
 }));
 
 ipcMain.handle('astra:updater-config', async (_event, config = {}) => {
-  autoUpdater.allowPrerelease = Boolean(config.allowPrerelease);
-  installAfterDownload = config.autoApply !== false;
-  setUpdaterState({ allowPrerelease: autoUpdater.allowPrerelease });
+  const allowPrerelease = Boolean(config.allowPrerelease);
+  setUpdaterState({ allowPrerelease });
   return { ok: true, state: updaterState };
 });
 
-ipcMain.handle('astra:updater-check', async () => {
-  try {
-    const result = await autoUpdater.checkForUpdates();
-    return { ok: true, state: updaterState, result: result?.updateInfo || null };
-  } catch (error) {
-    setUpdaterState({ phase: 'error', message: `Updater error: ${error?.message || 'unknown error'}`, error: error?.message || 'unknown error' });
-    return { ok: false, error: error?.message || 'unknown error', state: updaterState };
-  }
+ipcMain.handle('astra:updater-check', async (_event, payload = {}) => {
+  const installerUrl = typeof payload.installerUrl === 'string' ? payload.installerUrl : null;
+  const availableVersion = typeof payload.availableVersion === 'string' ? payload.availableVersion : null;
+  const currentVersion = typeof payload.currentVersion === 'string' ? payload.currentVersion : null;
+  const updateAvailable = Boolean(payload.updateAvailable && installerUrl);
+
+  setUpdaterState(updateAvailable ? {
+    phase: 'available',
+    message: `Update ${availableVersion || 'available'} ready. Open installer to apply it.${currentVersion ? ` Current version: ${currentVersion}.` : ''}`,
+    availableVersion,
+    downloadedVersion: null,
+    progressPercent: 0,
+    installerUrl,
+    error: null,
+    updateInfo: payload.release || null
+  } : {
+    phase: 'idle',
+    message: `Already up to date${currentVersion ? ` (${currentVersion})` : ''}.`,
+    availableVersion: availableVersion || currentVersion,
+    downloadedVersion: null,
+    progressPercent: 100,
+    installerUrl: null,
+    error: null,
+    updateInfo: payload.release || null
+  });
+
+  return { ok: true, state: updaterState, result: payload.release || null };
 });
 
 ipcMain.handle('astra:updater-state', () => ({ ok: true, state: updaterState }));

@@ -21,7 +21,8 @@
     "appId": "com.astra.desktop",
     "productName": "Astra",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "main.js",
@@ -48,9 +49,11 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
-      "shortcutName": "Astra"
+      "shortcutName": "Astra",
+      "include": "build/installer.nsh"
     },
     "publish": {
       "provider": "github",
