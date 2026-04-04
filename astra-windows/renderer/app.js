@@ -30,8 +30,12 @@ const state = {
     inputAudioContext: null,
     processor: null,
     sourceNode: null,
+    currentPlaybackSource: null,
     assistantAudioQueue: [],
     playing: false,
+    assistantPlaybackActive: false,
+    micGateUntilMs: 0,
+    bargeInVoiceChunkStreak: 0,
     lastAssistantText: '',
     lastUserText: ''
   },
@@ -222,6 +226,61 @@ function floatTo16BitPCM(float32Array) {
     out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
   }
   return out.buffer;
+}
+
+function estimatePcm16Rms(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  const samples = Math.max(1, arrayBuffer.byteLength / 2);
+  let sumSquares = 0;
+  for (let offset = 0; offset < arrayBuffer.byteLength; offset += 2) {
+    const sample = view.getInt16(offset, true);
+    sumSquares += sample * sample;
+  }
+  return Math.sqrt(sumSquares / samples);
+}
+
+function markAssistantPlaybackActive(active) {
+  state.call.assistantPlaybackActive = Boolean(active);
+  if (active) {
+    state.call.micGateUntilMs = Date.now() + 120;
+    if (state.call.active) state.call.status = 'live 🎙️';
+  } else {
+    state.call.micGateUntilMs = Date.now() + 80;
+    state.call.bargeInVoiceChunkStreak = 0;
+  }
+}
+
+function interruptAssistantPlayback() {
+  state.call.assistantAudioQueue = [];
+  try { window.speechSynthesis?.cancel?.(); } catch {}
+  try { state.call.currentPlaybackSource?.stop?.(0); } catch {}
+  try { state.call.currentPlaybackSource?.disconnect?.(); } catch {}
+  state.call.currentPlaybackSource = null;
+  state.call.playing = false;
+  markAssistantPlaybackActive(false);
+}
+
+function shouldUploadMicChunk(pcm16Buffer) {
+  if (!state.call.active) return false;
+
+  const now = Date.now();
+  if (!state.call.assistantPlaybackActive) {
+    return now >= state.call.micGateUntilMs;
+  }
+
+  const rms = estimatePcm16Rms(pcm16Buffer);
+  const allowBargeIn = rms >= 1800;
+  state.call.bargeInVoiceChunkStreak = allowBargeIn ? state.call.bargeInVoiceChunkStreak + 1 : 0;
+
+  if (state.call.bargeInVoiceChunkStreak >= 3) {
+    state.call.bargeInVoiceChunkStreak = 0;
+    interruptAssistantPlayback();
+    state.call.status = 'listening…';
+    render();
+    return true;
+  }
+
+  return false;
 }
 
 function parseSampleRateFromMimeType(mimeType) {
@@ -588,10 +647,13 @@ function teardownCallRuntime() {
   state.call.socket = null;
   try { state.call.processor?.disconnect(); } catch {}
   try { state.call.sourceNode?.disconnect(); } catch {}
+  try { state.call.currentPlaybackSource?.stop?.(0); } catch {}
+  try { state.call.currentPlaybackSource?.disconnect?.(); } catch {}
   try { state.call.inputAudioContext?.close(); } catch {}
   try { state.call.audioContext?.close(); } catch {}
   state.call.processor = null;
   state.call.sourceNode = null;
+  state.call.currentPlaybackSource = null;
   state.call.inputAudioContext = null;
   state.call.audioContext = null;
   if (state.call.mediaStream) {
@@ -600,6 +662,7 @@ function teardownCallRuntime() {
   state.call.mediaStream = null;
   state.call.assistantAudioQueue = [];
   state.call.playing = false;
+  markAssistantPlaybackActive(false);
 }
 
 function connectCallSocket() {
@@ -635,6 +698,7 @@ function handleCallEvent(type, data) {
       state.call.status = data.state || 'live';
       break;
     case 'call:transcript.partial':
+      interruptAssistantPlayback();
       state.call.status = 'listening…';
       break;
     case 'call:transcript.final':
@@ -698,6 +762,7 @@ async function startMicrophoneStreaming() {
     if (!state.call.active || !state.call.sessionId) return;
     const input = event.inputBuffer.getChannelData(0);
     const pcm16 = floatTo16BitPCM(input);
+    if (!shouldUploadMicChunk(pcm16)) return;
     const pcm16Base64 = arrayBufferToBase64(pcm16);
     fetch(`${callApiBase(state.baseUrl)}/api/call/${encodeURIComponent(state.call.sessionId)}/audio`, {
       method: 'POST',
@@ -722,9 +787,12 @@ function playNextAssistantAudio() {
   const next = state.call.assistantAudioQueue.shift();
   if (!next) {
     state.call.playing = false;
+    state.call.currentPlaybackSource = null;
+    markAssistantPlaybackActive(false);
     return;
   }
   state.call.playing = true;
+  markAssistantPlaybackActive(true);
   const sampleRate = next.sampleRate || 24000;
   const ctx = state.call.audioContext || new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
   state.call.audioContext = ctx;
@@ -733,9 +801,16 @@ function playNextAssistantAudio() {
   buffer.copyToChannel(pcm, 0);
   const src = ctx.createBufferSource();
   src.buffer = buffer;
+  state.call.currentPlaybackSource = src;
   src.connect(ctx.destination);
   src.onended = () => {
+    if (state.call.currentPlaybackSource === src) {
+      state.call.currentPlaybackSource = null;
+    }
     state.call.playing = false;
+    if (!state.call.assistantAudioQueue.length) {
+      markAssistantPlaybackActive(false);
+    }
     playNextAssistantAudio();
   };
   src.start();
